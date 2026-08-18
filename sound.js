@@ -1,4 +1,4 @@
-/* APPETITE sound: everything synthesized live, nothing recorded.
+﻿/* APPETITE sound: everything synthesized live, nothing recorded.
    little machine noises — typing ticks, cuts, chews, water —
    plus a very low room drone that differs from page to page.
    browsers only allow audio after a user gesture, so the kitchen
@@ -97,7 +97,7 @@
   window.sfx = {
     type()  { tone(1300 + Math.random() * 700, 0.028, 'square', 0.012); },
     click() { tone(680, 0.045, 'square', 0.028); tone(1020, 0.03, 'square', 0.016); },
-    cut()   { crunch(0.09, 0.12, 2400); tone(200, 0.07, 'sawtooth', 0.02, 120); },
+    cut()   { tone(175, 0.06, 'sine', 0.1, 58); tone(2500, 0.012, 'square', 0.02); crunch(0.045, 0.05, 2600); },
     punch() { crunch(0.06, 0.1, 1200); tone(160, 0.1, 'sine', 0.05, 80); },
     plop()  { tone(280, 0.13, 'sine', 0.06, 88); },
     chew()  { crunch(0.05, 0.11, 800 + Math.random() * 300); },

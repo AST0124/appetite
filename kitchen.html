@@ -332,6 +332,7 @@
   <button data-shape="star">☆</button>
   <button data-shape="heart">♡</button>
   <button data-shape="blob">〜</button>
+  <button data-shape="fish">&gt;&lt;&gt;</button>
 </div>
 
 <div id="bin">bin</div>
@@ -604,6 +605,13 @@ const SHAPES = {
         y: -(13*Math.cos(t) - 5*Math.cos(2*t) - 2*Math.cos(3*t) - Math.cos(4*t)) / 16
       };
     });
+  },
+  fish() {
+    return [
+      {x:0.76,y:0},{x:0.6,y:-0.3},{x:0.32,y:-0.48},{x:-0.04,y:-0.52},{x:-0.36,y:-0.4},
+      {x:-0.56,y:-0.16},{x:-0.76,y:-0.44},{x:-0.96,y:-0.6},{x:-0.86,y:0},{x:-0.96,y:0.6},
+      {x:-0.76,y:0.44},{x:-0.56,y:0.16},{x:-0.36,y:0.4},{x:-0.04,y:0.52},{x:0.32,y:0.48},{x:0.6,y:0.3}
+    ];
   },
   blob(n = 26) {
     return Array.from({length: n}, (_, i) => {
@@ -1153,8 +1161,7 @@ function currentBasket() {
 
 function buildIngredients() {
   ingredientsEl.innerHTML = '';
-  let numbers = currentBasket();
-  if (!numbers.length) numbers = [3, 8, 21, 26, 37, 47, 59, 75, 83, 88];
+  let numbers = currentBasket();   // empty basket = empty board, nothing uninvited
   numbers.forEach((n, i) => {
     const src = `img/web/image-${n}.jpg`;
     const img = document.createElement('img');
@@ -1190,9 +1197,7 @@ function loadLayout() {
   return false;
 }
 
-if (!loadLayout()) {
-  START_IMAGES.forEach(n => addPhoto(`img/web/image-${n}.jpg`));
-}
+loadLayout();   // first visit = empty table; only what the visitor picked appears
 
 /* keep the dish in place when the window changes size:
    scale every piece's position with the viewport */
