@@ -283,6 +283,7 @@
 </head>
 <body>
 <script src="transition.js"></script>
+<script src="sound.js"></script>
 
 <div id="backdrop"></div>
 
@@ -464,6 +465,7 @@ function removePiece(p) {
   setTimeout(() => el.remove(), 260);
   pieces = pieces.filter(q => q !== p);
   bump('binned');
+  window.sfx && sfx.plop();
   // the bin only pretends to throw things away — every scrap is kept for later pages
   try {
     const scraps = JSON.parse(localStorage.getItem('appetite-v2-scraps') || '[]');
@@ -508,13 +510,14 @@ function endCut() {
     const startIn = pointInPoly(local[0], p.poly);
     const endIn = pointInPoly(local[local.length-1], p.poly);
     if (startIn && endIn) {
-      if (loopCut(p, local)) { bump('cuts'); break; }
+      if (loopCut(p, local)) { bump('cuts'); window.sfx && sfx.cut(); break; }
       continue;
     }
     const result = splitPolygon(p.poly, local);
     if (result) {
       applySplit(p, result[0], result[1]);
       bump('cuts');
+      window.sfx && sfx.cut();
       break;
     }
   }
@@ -621,7 +624,7 @@ function punchAt(x, y) {
       x: localX + pt.x * MOULD_RADIUS / p.w * 100,
       y: localY + pt.y * MOULD_RADIUS / p.h * 100
     }));
-    if (loopCut(p, hole)) { bump('moulds'); saveLayout(); return; }
+    if (loopCut(p, hole)) { bump('moulds'); window.sfx && sfx.punch(); saveLayout(); return; }
   }
 }
 

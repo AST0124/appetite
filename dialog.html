@@ -102,6 +102,7 @@
 </head>
 <body>
 <script src="transition.js"></script>
+<script src="sound.js"></script>
 
 <div id="dialogWin">
   <div class="bar"><div class="btn"></div><div class="title">host.exe</div><div class="btn"></div></div>
@@ -137,6 +138,7 @@ let ci = 0;
 function type() {
   if (ci < QUESTION.length) {
     ci++;
+    window.sfx && sfx.type();
     qEl.innerHTML = QUESTION.slice(0, ci) + '<span class="cursor"></span>';
     setTimeout(type, 42);
   } else {

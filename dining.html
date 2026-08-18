@@ -192,6 +192,7 @@
 </head>
 <body>
 <script src="transition.js"></script>
+<script src="sound.js"></script>
 
 <div id="title"><b>APPETITE</b>: the table</div>
 
@@ -340,6 +341,7 @@ function chew(el, delay) {
     const iv = setInterval(() => {
       if (step < seq.length) {
         el.style.transform = seq[step];
+        window.sfx && sfx.chew();
         el.style.opacity = String(1 - step * 0.22);
         step++;
       } else {
@@ -380,6 +382,7 @@ function typeQuestion(question, done) {
   (function type() {
     if (ci < question.length) {
       ci++;
+      window.sfx && sfx.type();
       dqn.innerHTML = question.slice(0, ci) + '<span class="cursor"></span>';
       setTimeout(type, 40);
     } else {
