@@ -20,19 +20,39 @@
     : 110; /* entry */
   const WATER = path.includes('aquarium');
 
+  let breathedIn = false;
+  function breatheIn() {
+    // the room's sound fades up instead of popping in
+    if (breathedIn || !ctx || ctx.state !== 'running') return;
+    breathedIn = true;
+    const t = ctx.currentTime;
+    master.gain.cancelScheduledValues(t);
+    master.gain.setValueAtTime(0.0001, t);
+    if (enabled) master.gain.exponentialRampToValueAtTime(1, t + 1.1);
+  }
+
   function ensure() {
     if (!ctx) {
       try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
       master = ctx.createGain();
-      master.gain.value = enabled ? 1 : 0;
+      master.gain.value = 0;
       master.connect(ctx.destination);
       startRoom();
       if (WATER) startWater();
     }
-    if (ctx.state === 'suspended') ctx.resume();
+    if (ctx.state === 'suspended') {
+      ctx.resume().then(breatheIn).catch(() => {});
+    } else {
+      breatheIn();
+    }
   }
+  /* try as early as the browser will let us — the first touch of anything wakes the room */
   window.addEventListener('pointerdown', ensure);
   window.addEventListener('keydown', ensure);
+  window.addEventListener('pointermove', ensure);
+  window.addEventListener('wheel', ensure, { passive: true });
+  window.addEventListener('touchstart', ensure, { passive: true });
+  window.addEventListener('load', ensure);
 
   function tone(freq, dur, type, vol, glideTo) {
     if (!ctx || !enabled) return;
@@ -108,7 +128,15 @@
       if (master) master.gain.value = enabled ? 1 : 0;
       return enabled;
     },
-    isOn() { return enabled; }
+    isOn() { return enabled; },
+    fadeOut(sec) {
+      // breathe out before leaving the room
+      if (!ctx || !master) return;
+      const t = ctx.currentTime;
+      master.gain.cancelScheduledValues(t);
+      master.gain.setValueAtTime(Math.max(master.gain.value, 0.0001), t);
+      master.gain.exponentialRampToValueAtTime(0.0001, t + (sec || 0.35));
+    }
   };
 
   /* gentle click on every button and link */

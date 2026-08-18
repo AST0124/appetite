@@ -1,4 +1,4 @@
-﻿/* soft passage between rooms: every page breathes in on arrival,
+/* soft passage between rooms: every page breathes in on arrival,
    and breathes out before leaving */
 (function () {
   const style = document.createElement('style');
@@ -11,6 +11,7 @@
 
   window.fadeGo = function (url) {
     document.body.classList.remove('room-in');
+    if (window.sfx && window.sfx.fadeOut) window.sfx.fadeOut(0.38);
     setTimeout(() => { window.location.href = url; }, 420);
   };
 
