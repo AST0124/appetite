@@ -1,0 +1,1205 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>appetite — test kitchen</title>
+<style>
+  @font-face {
+    font-family: "Alike";
+    src: url("fonts/alike.woff2") format("woff2"),
+         url("https://fontsapi.zeoseven.com/fv/main.woff2") format("woff2");
+    font-display: swap;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #e8e6e1;
+    font-family: "Courier New", Courier, monospace;
+    -webkit-user-select: none; user-select: none;
+  }
+
+  #stage {
+    position: fixed; inset: 0;
+    touch-action: none;
+    z-index: 1;
+  }
+  /* the real tabletop: its own layer so it can drift gently with the cursor
+     while the plate and the food stay still */
+  #board {
+    position: absolute; inset: -40px;
+    background: url("elements/board-raw.jpg") 30% center / cover no-repeat;
+    will-change: transform;
+    z-index: 0;
+  }
+
+  /* backdrop layer, behind everything */
+  #backdrop {
+    position: fixed; inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  #backdrop .bg-img {
+    position: absolute; inset: 0;
+    background-size: cover;
+    background-position: center;
+  }
+  #backdrop canvas {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    image-rendering: pixelated;
+  }
+  #backdrop .bg-dots, #backdrop .bg-grain {
+    position: absolute; inset: 0;
+  }
+  #lens {
+    position: absolute;
+    width: 190px; height: 190px;
+    border-radius: 50%;
+    border: 1px solid rgba(0,0,0,0.18);
+    box-shadow: 0 4px 18px rgba(0,0,0,0.18), inset 0 0 24px rgba(255,255,255,0.12);
+    background-repeat: no-repeat;
+  }
+
+  /* the plate — right of the board, like on the sketch */
+  #plate {
+    position: absolute;
+    left: 74%; top: 50%;
+    width: 400px; height: 400px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: radial-gradient(circle at 44% 38%, #fbfaf6, #ece9df 70%, #dcd8ca);
+    border: 1px solid rgba(60, 45, 25, 0.4);
+    box-shadow: inset 0 0 46px rgba(80, 60, 30, 0.16), 0 12px 28px rgba(40, 28, 12, 0.35);
+    pointer-events: none;
+  }
+  #plate::after {
+    content: "";
+    position: absolute; inset: 40px;
+    border-radius: 50%;
+    border: 1px solid rgba(60, 45, 25, 0.22);
+  }
+
+  .piece {
+    position: absolute;
+    top: 0; left: 0;
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    cursor: grab;
+    filter: drop-shadow(2px 3px 6px rgba(0,0,0,0.25)) drop-shadow(0 1.5px 0 rgba(60,40,25,0.28));
+  }
+  body.handcur .piece, body.handcur .piece:active { cursor: inherit; }
+  .piece:active { cursor: grabbing; }
+  body.cutting .piece,
+  body.cutting #stage {
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30'%3E%3Cpath d='M3 3 L21 15 L15 21 Z' fill='%23e8e6e1' stroke='%23111' stroke-width='1.5'/%3E%3Crect x='16.5' y='16.5' width='11' height='5' rx='2' transform='rotate(45 18 18)' fill='%23111'/%3E%3C/svg%3E") 3 3, crosshair;
+  }
+  body.moulding .piece { cursor: pointer; }
+
+  .piece.vanish {
+    transition: transform 0.25s ease-in, opacity 0.25s ease-in;
+    opacity: 0 !important;
+  }
+
+  /* scrap bin bottom-right */
+  #bin {
+    position: fixed; right: 150px; bottom: 26px;
+    width: 128px; height: 128px;
+    border: 2px dashed rgba(90, 30, 25, 0.65);
+    border-radius: 50%;
+    background: rgba(232, 230, 225, 0.28);
+    z-index: 9300;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; letter-spacing: 2px; color: #5a2a22;
+    text-shadow: 0 1px 2px rgba(255,255,255,0.5);
+    pointer-events: none;
+  }
+  #bin.hot { border-color: #111; color: #111; background: rgba(0,0,0,0.04); }
+
+  /* cut path overlay */
+  #cutSvg {
+    position: fixed; inset: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 9000;
+  }
+  #cutSvg polyline {
+    fill: none;
+    stroke: #111;
+    stroke-width: 1.5;
+    stroke-dasharray: 4 3;
+  }
+
+  /* title settles at the bottom, out of the way of the table */
+  #title {
+    position: fixed; bottom: 42px; left: 22px;
+    font-size: 13px; letter-spacing: 2px;
+    color: #f0ece2;
+    text-shadow: 0 1px 4px rgba(20, 12, 4, 0.8);
+    z-index: 9500;
+    pointer-events: none;
+  }
+  #title b { font-weight: bold; font-family: "Alike", Georgia, serif; letter-spacing: 3px; }
+  #backLink {
+    position: fixed; bottom: 20px; left: 22px;
+    font-size: 11px; letter-spacing: 2px;
+    color: #d8d0be; text-decoration: none;
+    text-shadow: 0 1px 4px rgba(20, 12, 4, 0.8);
+    z-index: 9500;
+  }
+  #backLink:hover { color: #fff; }
+  #serveBtn {
+    position: fixed; right: 26px; bottom: 22px;
+    font-family: inherit;
+    font-size: 12px; letter-spacing: 2px;
+    color: #111; text-decoration: none;
+    border: 1.5px solid #111;
+    padding: 9px 18px;
+    background: #e8e6e1;
+    box-shadow: inset 2px 2px 0 #fbfaf7, inset -2px -2px 0 #b3afa5;
+    z-index: 9500;
+  }
+  #serveBtn:active { box-shadow: inset -2px -2px 0 #fbfaf7, inset 2px 2px 0 #b3afa5; }
+
+  /* tools top-right */
+  #tools {
+    position: fixed; top: 50%; right: 18px;
+    transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: 8px;
+    z-index: 9500;
+  }
+  #tools button { width: 106px; }
+  #tools button {
+    font-family: inherit;
+    font-size: 12px; letter-spacing: 1px;
+    padding: 6px 14px;
+    background: #e8e6e1;
+    border: 1.5px solid #111;
+    box-shadow: inset 2px 2px 0 #fbfaf7, inset -2px -2px 0 #b3afa5;
+    color: #111;
+    cursor: pointer;
+  }
+  #tools button.active {
+    background: #111; color: #e8e6e1;
+    box-shadow: none;
+  }
+  /* backdrop dials are Elisa's tool, not the visitors': press E to reveal */
+  #btnBackdrop { display: none; }
+  body.tune-open #btnBackdrop { display: block; }
+
+  /* mould shape picker slides out beside the rack */
+  #moulds {
+    position: fixed; top: 50%; right: 134px;
+    transform: translateY(-50%);
+    display: none; flex-direction: column; gap: 6px;
+    z-index: 9500;
+  }
+  body.moulding #moulds { display: flex; }
+  #moulds button {
+    font-family: inherit;
+    font-size: 14px;
+    width: 34px; height: 30px;
+    background: transparent;
+    border: 1px solid rgba(0,0,0,0.3);
+    color: #333;
+    cursor: pointer;
+  }
+  #moulds button.active { background: #111; color: #e8e6e1; }
+
+  /* backdrop playground panel */
+  #bgPanel {
+    position: fixed; top: 50%; right: 134px;
+    transform: translateY(-50%);
+    width: 240px;
+    display: none;
+    flex-direction: column; gap: 10px;
+    padding: 12px;
+    background: rgba(232,230,225,0.96);
+    border: 1px solid rgba(0,0,0,0.3);
+    z-index: 9600;
+  }
+  body.bg-open #bgPanel { display: flex; }
+  #bgPanel .bg-label {
+    font-size: 10px; letter-spacing: 1.5px; color: #777;
+  }
+  #bgEffects { display: flex; flex-wrap: wrap; gap: 5px; }
+  #bgEffects button {
+    font-family: inherit; font-size: 11px; letter-spacing: 0.5px;
+    padding: 4px 8px;
+    background: transparent;
+    border: 1px solid rgba(0,0,0,0.3); color: #333;
+    cursor: pointer;
+  }
+  #bgEffects button.active { background: #111; color: #e8e6e1; }
+  #bgMotion { display: flex; gap: 5px; }
+  #bgMotion button {
+    font-family: inherit; font-size: 11px; letter-spacing: 0.5px;
+    padding: 4px 8px;
+    background: transparent;
+    border: 1px solid rgba(0,0,0,0.3); color: #333;
+    cursor: pointer;
+  }
+  #bgMotion button.active { background: #111; color: #e8e6e1; }
+  #bgParams { display: flex; flex-direction: column; gap: 6px; }
+  #bgParams .dial { display: grid; grid-template-columns: 82px 1fr 30px; align-items: center; gap: 6px; }
+  #bgParams .dial label { font-size: 10px; letter-spacing: 0.5px; color: #555; }
+  #bgParams .dial input { width: 100%; accent-color: #111; }
+  #bgParams .dial .val { font-size: 10px; color: #555; text-align: right; }
+  #bgParams .dial-empty { font-size: 10px; color: #999; letter-spacing: 0.5px; }
+  #bgThumbs {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;
+    max-height: 120px; overflow-y: auto;
+  }
+  #bgThumbs img {
+    width: 100%; aspect-ratio: 1; object-fit: cover;
+    cursor: pointer; opacity: 0.7;
+    border: 1px solid transparent;
+  }
+  #bgThumbs img:hover { opacity: 1; }
+  #bgThumbs img.active { opacity: 1; border-color: #111; }
+
+  /* ingredients lie loose on the board, waiting to be picked up */
+  #ingredients {
+    position: fixed;
+    left: 3%; top: 16%;
+    width: 42%; height: 62%;
+    z-index: 9400;
+    pointer-events: none;
+  }
+  #ingredients img {
+    position: absolute;
+    height: 94px;
+    cursor: pointer;
+    box-shadow: 0 4px 9px rgba(30, 20, 8, 0.45);
+    border: 1px solid rgba(255,255,255,0.4);
+    transition: transform 0.25s ease;
+    pointer-events: auto;
+  }
+  #ingredients img:hover { transform: scale(1.5) rotate(0deg) !important; z-index: 5; }
+</style>
+</head>
+<body>
+<script src="transition.js"></script>
+
+<div id="backdrop"></div>
+
+<div id="stage">
+  <div id="board"></div>
+  <div id="plate"></div>
+</div>
+
+<svg id="cutSvg"><polyline id="cutLine" points=""></polyline></svg>
+
+<a id="backLink" href="cabinet.html">← cabinet</a>
+<a id="serveBtn" href="receipt.html">serve →</a>
+
+<div id="tools">
+  <button id="btnHand" class="active">hand</button>
+  <button id="btnKnife">knife</button>
+  <button id="btnMould">mould</button>
+  <button id="btnBackdrop">backdrop</button>
+  <button id="btnReset">clear table</button>
+</div>
+
+<div id="bgPanel">
+  <div class="bg-label">EFFECT</div>
+  <div id="bgEffects">
+    <button data-fx="none" class="active">none</button>
+    <button data-fx="wallpaper">wallpaper</button>
+    <button data-fx="pixelate">pixelate</button>
+    <button data-fx="halftone">halftone</button>
+    <button data-fx="gradient">gradient</button>
+    <button data-fx="grain">grain</button>
+  </div>
+  <div class="bg-label">MOTION (follows your cursor)</div>
+  <div id="bgMotion">
+    <button data-motion="still" class="active">still</button>
+    <button data-motion="parallax">parallax</button>
+    <button data-motion="lens">lens</button>
+  </div>
+  <div class="bg-label">DIALS</div>
+  <div id="bgParams"></div>
+  <div class="bg-label">PHOTO</div>
+  <div id="bgThumbs"></div>
+</div>
+
+<div id="moulds">
+  <button data-shape="circle" class="active">◯</button>
+  <button data-shape="star">☆</button>
+  <button data-shape="heart">♡</button>
+  <button data-shape="blob">〜</button>
+</div>
+
+<div id="bin">bin</div>
+
+<div id="ingredients"></div>
+
+<script>
+/* ============ EDIT ZONE ============
+   photos on the shelf — swap freely  */
+const MISSING = [12, 16, 63, 73];              // numbers that don't exist in the folder
+const SHELF_IMAGES = Array.from({length: 92}, (_, i) => i + 1)
+  .filter(n => !MISSING.includes(n))
+  .map(n => `img/web/image-${n}.jpg`);
+const SHELF_THUMBS = SHELF_IMAGES.map(p => p.replace('/web/', '/thumb/'));
+const START_IMAGES = [3, 26, 47, 83];          // photos already on the table
+const BASE_WIDTH = 320;                        // starting size of a served photo
+
+/* Elisa's working tags — the names shown on the shelf are placeholders,
+   rename them anytime; a photo may live in several groups */
+const CATEGORIES = {
+  'domestic': [1,2,3,4,5,6,7,8,9,10,11,13,14,15,17,42,43,44,45,46,47,51,53,54,55,61,62,64,65,66,69,70,71,72,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92],
+  'nature': [18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,50,52,56,57,58,59,60],
+  'appetite': [1,4,5,6,7,8,9,10,11,13,14,36,47,48,49,51,53,54,55,67,68,69,70,71,72,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92]
+};
+const EDGE_ROUGHNESS = 5;                      // how torn the knife edge looks (0 = clean)
+/* ==================================== */
+
+const stage = document.getElementById('stage');
+const cutLine = document.getElementById('cutLine');
+
+/* the kitchen quietly keeps count of everything the visitor does;
+   the receipt page reads this ledger before they may eat */
+let stats = { served: 0, cuts: 0, moulds: 0, binned: 0, firstTouch: 0 };
+try { Object.assign(stats, JSON.parse(localStorage.getItem('appetite-v2-stats') || '{}')); } catch (e) {}
+function bump(key) {
+  if (!stats.firstTouch) stats.firstTouch = Date.now();
+  stats[key]++;
+  localStorage.setItem('appetite-v2-stats', JSON.stringify(stats));
+}
+let mode = 'hand';
+let pieces = [];
+let zTop = 10;
+let idSeq = 1;
+
+/* ---------- piece creation ---------- */
+function makePiece(src, x, y, w, h, poly) {
+  const p = {
+    id: idSeq++, src, x, y, w, h,
+    poly: poly || [{x:0,y:0},{x:100,y:0},{x:100,y:100},{x:0,y:100}],
+    z: ++zTop, el: document.createElement('div')
+  };
+  p.el.className = 'piece';
+  p.el.style.backgroundImage = `url("${src}")`;
+  pieces.push(p);
+  stage.appendChild(p.el);
+  renderPiece(p);
+  return p;
+}
+
+function renderPiece(p) {
+  const s = p.el.style;
+  s.width = p.w + 'px';
+  s.height = p.h + 'px';
+  s.transform = `translate(${p.x}px, ${p.y}px)`;
+  s.zIndex = p.z;
+  s.clipPath = 'polygon(' + p.poly.map(pt => `${pt.x}% ${pt.y}%`).join(', ') + ')';
+}
+
+function addPhoto(src, cx, cy) {
+  const img = new Image();
+  img.onload = () => {
+    const w = BASE_WIDTH;
+    const h = w * img.naturalHeight / img.naturalWidth;
+    const x = (cx !== undefined ? cx : window.innerWidth/2 + (Math.random()*200-100)) - w/2;
+    const y = (cy !== undefined ? cy : window.innerHeight/2 + (Math.random()*140-90)) - h/2;
+    makePiece(src, x, y, w, h);
+    saveLayout();
+    bump('served');
+  };
+  img.src = src;
+}
+
+/* ---------- dragging ---------- */
+let dragging = null, dragOff = {x:0,y:0};
+
+stage.addEventListener('pointerdown', e => {
+  if (mode === 'knife') { startCut(e); return; }
+  if (mode === 'mould') { punchAt(e.clientX, e.clientY); return; }
+  const p = pieceFromElement(e.target);
+  if (!p) return;
+  dragging = p;
+  p.z = ++zTop;
+  dragOff.x = e.clientX - p.x;
+  dragOff.y = e.clientY - p.y;
+  renderPiece(p);
+  stage.setPointerCapture(e.pointerId);
+});
+
+stage.addEventListener('pointermove', e => {
+  if (mode === 'knife') { moveCut(e); return; }
+  if (!dragging) return;
+  dragging.x = e.clientX - dragOff.x;
+  dragging.y = e.clientY - dragOff.y;
+  renderPiece(dragging);
+  bin.classList.toggle('hot', overBin(e.clientX, e.clientY));
+});
+
+stage.addEventListener('pointerup', e => {
+  if (mode === 'knife') { endCut(e); return; }
+  if (dragging) {
+    if (overBin(e.clientX, e.clientY)) removePiece(dragging);
+    dragging = null;
+    bin.classList.remove('hot');
+    saveLayout();
+  }
+});
+
+/* ---------- scrap bin ---------- */
+const bin = document.getElementById('bin');
+
+function overBin(x, y) {
+  const r = bin.getBoundingClientRect();
+  const cx = r.left + r.width/2, cy = r.top + r.height/2;
+  return Math.hypot(x - cx, y - cy) < r.width/2 + 20;
+}
+
+function removePiece(p) {
+  p.el.classList.add('vanish');
+  p.el.style.transform += ' scale(0.1)';
+  const el = p.el;
+  setTimeout(() => el.remove(), 260);
+  pieces = pieces.filter(q => q !== p);
+  bump('binned');
+  // the bin only pretends to throw things away — every scrap is kept for later pages
+  try {
+    const scraps = JSON.parse(localStorage.getItem('appetite-v2-scraps') || '[]');
+    scraps.push({ src: p.src, poly: p.poly, w: p.w, h: p.h, at: Date.now() });
+    localStorage.setItem('appetite-v2-scraps', JSON.stringify(scraps));
+  } catch (e) {}
+}
+
+function pieceFromElement(el) {
+  return pieces.find(p => p.el === el) || null;
+}
+
+/* ---------- cutting ---------- */
+let cutPath = null;
+
+function startCut(e) {
+  cutPath = [{x: e.clientX, y: e.clientY}];
+  cutLine.setAttribute('points', '');
+}
+function moveCut(e) {
+  if (!cutPath) return;
+  const last = cutPath[cutPath.length-1];
+  const dx = e.clientX - last.x, dy = e.clientY - last.y;
+  if (dx*dx + dy*dy < 16) return;
+  cutPath.push({x: e.clientX, y: e.clientY});
+  cutLine.setAttribute('points', cutPath.map(pt => `${pt.x},${pt.y}`).join(' '));
+}
+function endCut() {
+  if (!cutPath || cutPath.length < 3) { cutPath = null; cutLine.setAttribute('points',''); return; }
+  const sorted = [...pieces].sort((a,b) => b.z - a.z);
+  for (const p of sorted) {
+    const local = cutPath.map((pt, idx) => {
+      // rough up the cut a little so the edge tears like food, not paper
+      const jx = (idx === 0 || idx === cutPath.length-1) ? 0 : (Math.random()-0.5) * EDGE_ROUGHNESS;
+      const jy = (idx === 0 || idx === cutPath.length-1) ? 0 : (Math.random()-0.5) * EDGE_ROUGHNESS;
+      return {
+        x: (pt.x + jx - p.x) / p.w * 100,
+        y: (pt.y + jy - p.y) / p.h * 100
+      };
+    });
+    // both ends of the stroke landed inside this piece: treat it as a loop and lift the shape out
+    const startIn = pointInPoly(local[0], p.poly);
+    const endIn = pointInPoly(local[local.length-1], p.poly);
+    if (startIn && endIn) {
+      if (loopCut(p, local)) { bump('cuts'); break; }
+      continue;
+    }
+    const result = splitPolygon(p.poly, local);
+    if (result) {
+      applySplit(p, result[0], result[1]);
+      bump('cuts');
+      break;
+    }
+  }
+  cutPath = null;
+  cutLine.setAttribute('points','');
+  saveLayout();
+}
+
+/* cut a closed shape out of a piece: the shape lifts out, the rest keeps a hole */
+function loopCut(p, hole) {
+  if (hole.length < 3) return false;
+  if (area(hole) < 20) return false;
+  const inside = hole.filter(pt => pointInPoly(pt, p.poly)).length;
+  if (inside < hole.length * 0.6) return false;
+
+  const remainder = polygonWithHole(p.poly, hole);
+  if (!remainder) return false;
+
+  const cutout = makePiece(p.src, p.x + 12, p.y + 12, p.w, p.h, [...hole]);
+  const rest = makePiece(p.src, p.x, p.y, p.w, p.h, remainder);
+  cutout.z = ++zTop;
+  renderPiece(cutout); renderPiece(rest);
+
+  p.el.remove();
+  pieces = pieces.filter(q => q !== p);
+  return true;
+}
+
+/* merge outer ring and hole into one polygon via a zero-width bridge */
+function polygonWithHole(outer, hole) {
+  // hole must wind opposite to the outer ring
+  let h = [...hole];
+  if (signedArea(outer) * signedArea(h) > 0) h.reverse();
+
+  // bridge between the closest pair of vertices
+  let bi = 0, bj = 0, best = Infinity;
+  for (let i = 0; i < outer.length; i++) {
+    for (let j = 0; j < h.length; j++) {
+      const d = (outer[i].x - h[j].x)**2 + (outer[i].y - h[j].y)**2;
+      if (d < best) { best = d; bi = i; bj = j; }
+    }
+  }
+  const ring = [];
+  for (let i = 0; i <= bi; i++) ring.push(outer[i]);
+  for (let j = 0; j <= h.length; j++) ring.push(h[(bj + j) % h.length]);
+  for (let i = bi; i < outer.length; i++) ring.push(outer[i]);
+  return ring;
+}
+
+function signedArea(poly) {
+  let a = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const j = (i+1) % poly.length;
+    a += poly[i].x * poly[j].y - poly[j].x * poly[i].y;
+  }
+  return a / 2;
+}
+
+/* ---------- moulds ---------- */
+let mouldShape = 'circle';
+const MOULD_RADIUS = 62;   // screen px
+
+const SHAPES = {
+  circle(n = 22) {
+    return Array.from({length: n}, (_, i) => {
+      const t = i / n * Math.PI * 2;
+      return { x: Math.cos(t), y: Math.sin(t) };
+    });
+  },
+  star() {
+    const pts = [];
+    for (let i = 0; i < 10; i++) {
+      const t = i / 10 * Math.PI * 2 - Math.PI / 2;
+      const r = i % 2 === 0 ? 1 : 0.45;
+      pts.push({ x: Math.cos(t) * r, y: Math.sin(t) * r });
+    }
+    return pts;
+  },
+  heart(n = 26) {
+    return Array.from({length: n}, (_, i) => {
+      const t = i / n * Math.PI * 2;
+      return {
+        x: Math.pow(Math.sin(t), 3),
+        y: -(13*Math.cos(t) - 5*Math.cos(2*t) - 2*Math.cos(3*t) - Math.cos(4*t)) / 16
+      };
+    });
+  },
+  blob(n = 26) {
+    return Array.from({length: n}, (_, i) => {
+      const t = i / n * Math.PI * 2;
+      const r = 0.82 + 0.16*Math.sin(3*t + 1) + 0.09*Math.sin(7*t);
+      return { x: Math.cos(t) * r, y: Math.sin(t) * r };
+    });
+  }
+};
+
+function punchAt(x, y) {
+  const sorted = [...pieces].sort((a,b) => b.z - a.z);
+  for (const p of sorted) {
+    const localX = (x - p.x) / p.w * 100;
+    const localY = (y - p.y) / p.h * 100;
+    if (!pointInPoly({x: localX, y: localY}, p.poly)) continue;
+    const hole = SHAPES[mouldShape]().map(pt => ({
+      x: localX + pt.x * MOULD_RADIUS / p.w * 100,
+      y: localY + pt.y * MOULD_RADIUS / p.h * 100
+    }));
+    if (loopCut(p, hole)) { bump('moulds'); saveLayout(); return; }
+  }
+}
+
+function applySplit(p, polyA, polyB) {
+  const ca = centroid(polyA), cb = centroid(polyB);
+  let nx = cb.x - ca.x, ny = cb.y - ca.y;
+  const len = Math.hypot(nx, ny) || 1;
+  nx /= len; ny /= len;
+  const gap = 14;
+
+  const a = makePiece(p.src, p.x - nx*gap, p.y - ny*gap, p.w, p.h, polyA);
+  const b = makePiece(p.src, p.x + nx*gap, p.y + ny*gap, p.w, p.h, polyB);
+  a.z = ++zTop; b.z = ++zTop;
+  renderPiece(a); renderPiece(b);
+
+  p.el.remove();
+  pieces = pieces.filter(q => q !== p);
+}
+
+/* split a polygon with a freehand path that enters and exits it once.
+   returns [polyA, polyB] or null if the path doesn't cross it properly. */
+function splitPolygon(poly, path) {
+  const n = poly.length;
+  const hits = [];
+  for (let k = 0; k < path.length - 1; k++) {
+    for (let i = 0; i < n; i++) {
+      const hit = segIntersect(path[k], path[k+1], poly[i], poly[(i+1)%n]);
+      if (hit) hits.push({ t: k + hit.t, edge: i, s: hit.s, pt: hit.pt });
+    }
+  }
+  if (hits.length < 2) return null;
+  hits.sort((a,b) => a.t - b.t);
+  const en = hits[0], ex = hits[hits.length-1];
+  if (en.edge === ex.edge && Math.abs(en.s - ex.s) < 1e-6) return null;
+
+  const inner = path.filter((pt, idx) => idx > Math.floor(en.t) && idx <= Math.floor(ex.t))
+                    .filter(pt => pointInPoly(pt, poly));
+  const S = [en.pt, ...inner, ex.pt];
+
+  // path enters and leaves through the same edge: one side is just the notch
+  if (en.edge === ex.edge) {
+    const all = [];
+    let k2 = (en.edge + 1) % n;
+    for (let c = 0; c < n; c++) { all.push(poly[k2]); k2 = (k2 + 1) % n; }
+    const notchFirst = en.s < ex.s;
+    const pA = notchFirst ? [...S] : [...S, ...all];
+    const pB = notchFirst ? [...[...S].reverse(), ...all] : [...S].reverse();
+    if (area(pA) < 40 || area(pB) < 40) return null;
+    return [pA, pB];
+  }
+
+  // A: the cut path, then polygon vertices from the exit edge around to the entry edge
+  const polyA = [...S];
+  let m = (ex.edge + 1) % n;
+  while (true) {
+    polyA.push(poly[m]);
+    if (m === en.edge) break;
+    m = (m + 1) % n;
+    if (polyA.length > n + S.length + 2) break;
+  }
+  // B: the cut path reversed, then polygon vertices from the entry edge around to the exit edge
+  const polyB = [...S].reverse();
+  let j = (en.edge + 1) % n;
+  while (true) {
+    polyB.push(poly[j]);
+    if (j === ex.edge) break;
+    j = (j + 1) % n;
+    if (polyB.length > n + S.length + 2) break;
+  }
+
+  if (area(polyA) < 40 || area(polyB) < 40) return null;
+  return [polyA, polyB];
+}
+
+function segIntersect(a, b, c, d) {
+  const r = {x: b.x-a.x, y: b.y-a.y}, s = {x: d.x-c.x, y: d.y-c.y};
+  const denom = r.x*s.y - r.y*s.x;
+  if (Math.abs(denom) < 1e-9) return null;
+  const t = ((c.x-a.x)*s.y - (c.y-a.y)*s.x) / denom;
+  const u = ((c.x-a.x)*r.y - (c.y-a.y)*r.x) / denom;
+  if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+  return { t, s: u, pt: {x: a.x + t*r.x, y: a.y + t*r.y} };
+}
+
+function pointInPoly(pt, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length-1; i < poly.length; j = i++) {
+    if ((poly[i].y > pt.y) !== (poly[j].y > pt.y) &&
+        pt.x < (poly[j].x - poly[i].x) * (pt.y - poly[i].y) / (poly[j].y - poly[i].y) + poly[i].x)
+      inside = !inside;
+  }
+  return inside;
+}
+
+function centroid(poly) {
+  let x = 0, y = 0;
+  poly.forEach(p => { x += p.x; y += p.y; });
+  return { x: x/poly.length, y: y/poly.length };
+}
+
+function area(poly) {
+  let a = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const j = (i+1) % poly.length;
+    a += poly[i].x * poly[j].y - poly[j].x * poly[i].y;
+  }
+  return Math.abs(a/2);
+}
+
+/* ---------- tools ---------- */
+const btnHand = document.getElementById('btnHand');
+const btnKnife = document.getElementById('btnKnife');
+const btnMould = document.getElementById('btnMould');
+document.getElementById('btnReset').addEventListener('click', () => {
+  pieces.forEach(p => p.el.remove());
+  pieces = [];
+  saveLayout();   // an empty table stays empty
+});
+btnHand.addEventListener('click', () => setMode('hand'));
+btnKnife.addEventListener('click', () => setMode('knife'));
+btnMould.addEventListener('click', () => setMode('mould'));
+function setMode(m) {
+  mode = m;
+  document.body.classList.toggle('cutting', m === 'knife');
+  document.body.classList.toggle('moulding', m === 'mould');
+  btnHand.classList.toggle('active', m === 'hand');
+  btnKnife.classList.toggle('active', m === 'knife');
+  btnMould.classList.toggle('active', m === 'mould');
+  applyHandCursor();
+}
+
+/* Elisa's own hand as the hand-mode cursor */
+let handCursorUrl = null;
+const handCurSrc = new Image();
+handCurSrc.onload = () => {
+  const BAYER4 = [ [0,8,2,10], [12,4,14,6], [3,11,1,9], [15,7,13,5] ];
+  const W = handCurSrc.naturalWidth, H = handCurSrc.naturalHeight;
+  const sy = H * 0.62, sh = H * 0.38;      // just the hand, not the whole arm
+  const w = 46, h = Math.round(w * sh / W);
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const x = c.getContext('2d');
+  x.drawImage(handCurSrc, 0, sy, W, sh, 0, 0, w, h);
+  const d = x.getImageData(0, 0, w, h);
+  const L = 5;
+  for (let yy = 0; yy < h; yy++) {
+    for (let xx = 0; xx < w; xx++) {
+      const i = (yy * w + xx) * 4;
+      const lum = d.data[i]*0.299 + d.data[i+1]*0.587 + d.data[i+2]*0.114;
+      d.data[i+3] = Math.max(0, Math.min(255, (lum - 16) * 10));
+      const bt = (BAYER4[yy % 4][xx % 4] + 0.5) / 16 - 0.5;
+      for (let ch = 0; ch < 3; ch++) {
+        const desat = d.data[i + ch] * 0.68 + lum * 0.32;
+        let q = Math.round(desat / 255 * (L - 1) + bt);
+        q = q < 0 ? 0 : (q > L - 1 ? L - 1 : q);
+        d.data[i + ch] = q / (L - 1) * 255;
+      }
+    }
+  }
+  x.putImageData(d, 0, 0);
+  handCursorUrl = c.toDataURL();
+  applyHandCursor();
+};
+handCurSrc.src = 'elements/hand-cut.jpg';
+
+function applyHandCursor() {
+  if (mode === 'hand' && handCursorUrl) {
+    stage.style.cursor = `url(${handCursorUrl}) 23 40, grab`;
+    document.body.classList.add('handcur');
+  } else {
+    stage.style.cursor = '';
+    document.body.classList.remove('handcur');
+  }
+}
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'e' || e.key === 'E') document.body.classList.toggle('tune-open');
+});
+
+document.querySelectorAll('#moulds button').forEach(b => {
+  b.addEventListener('click', () => {
+    mouldShape = b.dataset.shape;
+    document.querySelectorAll('#moulds button').forEach(x => x.classList.toggle('active', x === b));
+  });
+});
+
+/* ---------- backdrop playground ---------- */
+const backdropEl = document.getElementById('backdrop');
+const bgState = { fx: 'none', photo: SHELF_IMAGES[4], motion: 'still', p: {} };
+
+/* every dial, per effect — tweak ranges freely */
+const FX_PARAMS = {
+  none: [],
+  wallpaper: [
+    { k: 'blur',   label: 'blur',      min: 0,   max: 40,  def: 14 },
+    { k: 'dark',   label: 'darken',    min: 0,   max: 60,  def: 8 }
+  ],
+  pixelate: [
+    { k: 'blocks', label: 'blocks',    min: 10,  max: 110, def: 70 },
+    { k: 'wobble', label: 'wobble',    min: 0,   max: 30,  def: 10 },
+    { k: 'speed',  label: 'speed',     min: 0,   max: 30,  def: 13 },
+    { k: 'stir',   label: 'mouse stir',  min: 0, max: 80,  def: 34 },
+    { k: 'reach',  label: 'mouse reach', min: 0, max: 40,  def: 16 }
+  ],
+  halftone: [
+    { k: 'dot',      label: 'dot size', min: 2,   max: 24,  def: 10 },
+    { k: 'contrast', label: 'contrast', min: 100, max: 250, def: 150 }
+  ],
+  gradient: [
+    { k: 'sat', label: 'saturation', min: 0, max: 200, def: 110 }
+  ],
+  grain: [
+    { k: 'amount', label: 'grain', min: 0, max: 100, def: 35 },
+    { k: 'blur',   label: 'blur',  min: 0, max: 10,  def: 3 }
+  ]
+};
+const MOTION_PARAMS = {
+  still: [],
+  parallax: [
+    { k: 'depth', label: 'depth', min: 0, max: 120, def: 45 }
+  ],
+  lens: [
+    { k: 'zoom', label: 'zoom', min: 105, max: 220, def: 150 },
+    { k: 'size', label: 'size', min: 100, max: 320, def: 190 }
+  ]
+};
+
+function getP(group, key) {
+  const defs = FX_PARAMS[group] || MOTION_PARAMS[group] || [];
+  const def = defs.find(d => d.k === key);
+  const stored = bgState.p[group] && bgState.p[group][key];
+  return stored !== undefined ? stored : (def ? def.def : 0);
+}
+
+function renderParams() {
+  const box = document.getElementById('bgParams');
+  box.innerHTML = '';
+  const defs = [
+    ...FX_PARAMS[bgState.fx].map(d => ({...d, group: bgState.fx})),
+    ...MOTION_PARAMS[bgState.motion].map(d => ({...d, group: bgState.motion}))
+  ];
+  if (!defs.length) {
+    box.innerHTML = '<div class="dial-empty">pick an effect or motion to get dials</div>';
+    return;
+  }
+  defs.forEach(d => {
+    const row = document.createElement('div');
+    row.className = 'dial';
+    const lab = document.createElement('label');
+    lab.textContent = d.label;
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.min = d.min; input.max = d.max;
+    input.value = getP(d.group, d.k);
+    const val = document.createElement('span');
+    val.className = 'val';
+    val.textContent = input.value;
+    let timer = null;
+    input.addEventListener('input', () => {
+      val.textContent = input.value;
+      if (!bgState.p[d.group]) bgState.p[d.group] = {};
+      bgState.p[d.group][d.k] = +input.value;
+      clearTimeout(timer);
+      timer = setTimeout(applyBackdrop, 90);
+    });
+    row.appendChild(lab); row.appendChild(input); row.appendChild(val);
+    box.appendChild(row);
+  });
+}
+
+/* cursor-reactive motion: the page always knows where the cursor is;
+   every frame we ease the background toward it */
+let mouseX = window.innerWidth / 2, mouseY = window.innerHeight / 2;
+let easeX = mouseX, easeY = mouseY;
+let pixelAnim = null;
+window.addEventListener('pointermove', e => { mouseX = e.clientX; mouseY = e.clientY; });
+
+const boardEl = document.getElementById('board');
+
+function motionLoop() {
+  easeX += (mouseX - easeX) * 0.07;
+  easeY += (mouseY - easeY) * 0.07;
+
+  // the board drifts a little under the cursor; everything on it stays put
+  const bdx = (0.5 - easeX / window.innerWidth) * 24;
+  const bdy = (0.5 - easeY / window.innerHeight) * 15;
+  boardEl.style.transform = `translate(${bdx}px, ${bdy}px)`;
+
+  // living pixels: each cell's color wobbles, and cells near the cursor get stirred
+  if (bgState.fx === 'pixelate' && pixelAnim && pixelAnim.canvas.isConnected) {
+    const {src, out, cw, ch, ctx} = pixelAnim;
+    const t = performance.now() / 1000 * (getP('pixelate', 'speed') / 13);
+    const wob = getP('pixelate', 'wobble') / 10;
+    const mcx = easeX / window.innerWidth * cw;
+    const mcy = easeY / window.innerHeight * ch;
+    const radius = Math.max(1, cw * getP('pixelate', 'reach') / 100);
+    const stir = getP('pixelate', 'stir') / 10;
+    const d8 = out.data;
+    for (let iy = 0; iy < ch; iy++) {
+      for (let ix = 0; ix < cw; ix++) {
+        let dx = Math.sin(ix * 1.31 + t * 1.7 + iy * 0.73) * Math.cos(iy * 1.13 + t * 1.24) * wob;
+        let dy = Math.cos(ix * 0.87 - t * 1.46 + iy * 1.42) * Math.sin(iy * 0.79 + t * 1.08 + ix * 0.31) * wob;
+        const ddx = ix - mcx, ddy = iy - mcy;
+        const dist = Math.hypot(ddx, ddy);
+        if (dist < radius && dist > 0.001) {
+          const push = (1 - dist / radius) * stir;
+          dx += ddx / dist * push;
+          dy += ddy / dist * push;
+        }
+        let sx = Math.round(ix + dx); if (sx < 0) sx = 0; else if (sx >= cw) sx = cw - 1;
+        let sy = Math.round(iy + dy); if (sy < 0) sy = 0; else if (sy >= ch) sy = ch - 1;
+        const si = (sy * cw + sx) * 4;
+        const oi = (iy * cw + ix) * 4;
+        d8[oi] = src[si]; d8[oi+1] = src[si+1]; d8[oi+2] = src[si+2]; d8[oi+3] = 255;
+      }
+    }
+    ctx.putImageData(out, 0, 0);
+  }
+
+  if (bgState.motion === 'parallax') {
+    const layer = backdropEl.querySelector('.bg-img, canvas');
+    if (layer) {
+      const depth = getP('parallax', 'depth');
+      const dx = (0.5 - easeX / window.innerWidth) * depth;
+      const dy = (0.5 - easeY / window.innerHeight) * depth;
+      layer.style.transform = `scale(1.14) translate(${dx}px, ${dy}px)`;
+    }
+  } else if (bgState.motion === 'lens') {
+    const lens = document.getElementById('lens');
+    if (lens) {
+      const r = getP('lens', 'size') / 2;
+      const zoom = getP('lens', 'zoom') / 100;
+      lens.style.left = (easeX - r) + 'px';
+      lens.style.top = (easeY - r) + 'px';
+      lens.style.backgroundSize = `${window.innerWidth * zoom}px auto`;
+      lens.style.backgroundPosition = `${-(easeX * zoom - r)}px ${-(easeY * zoom - r)}px`;
+    }
+  }
+  requestAnimationFrame(motionLoop);
+}
+requestAnimationFrame(motionLoop);
+
+function applyMotion() {
+  const old = document.getElementById('lens');
+  if (old) old.remove();
+  if (bgState.motion === 'lens') {
+    const lens = document.createElement('div');
+    lens.id = 'lens';
+    const size = getP('lens', 'size');
+    lens.style.width = size + 'px';
+    lens.style.height = size + 'px';
+    lens.style.backgroundImage = `url("${bgState.photo}")`;
+    backdropEl.appendChild(lens);
+  }
+}
+
+document.querySelectorAll('#bgMotion button').forEach(b => {
+  b.addEventListener('click', () => {
+    bgState.motion = b.dataset.motion;
+    document.querySelectorAll('#bgMotion button').forEach(x => x.classList.toggle('active', x === b));
+    renderParams();
+    applyBackdrop();
+  });
+});
+
+document.getElementById('btnBackdrop').addEventListener('click', () => {
+  document.body.classList.toggle('bg-open');
+});
+
+document.querySelectorAll('#bgEffects button').forEach(b => {
+  b.addEventListener('click', () => {
+    bgState.fx = b.dataset.fx;
+    document.querySelectorAll('#bgEffects button').forEach(x => x.classList.toggle('active', x === b));
+    renderParams();
+    applyBackdrop();
+  });
+});
+
+const bgThumbs = document.getElementById('bgThumbs');
+SHELF_THUMBS.forEach((thumb, i) => {
+  const img = document.createElement('img');
+  img.src = thumb;
+  if (SHELF_IMAGES[i] === bgState.photo) img.classList.add('active');
+  img.addEventListener('click', () => {
+    bgState.photo = SHELF_IMAGES[i];
+    bgThumbs.querySelectorAll('img').forEach(x => x.classList.toggle('active', x === img));
+    applyBackdrop();
+  });
+  bgThumbs.appendChild(img);
+});
+
+const GRAIN_URI = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E\")";
+
+function applyBackdrop() {
+  backdropEl.innerHTML = '';
+  pixelAnim = null;
+  if (bgState.fx === 'none') { saveBackdrop(); return; }
+
+  if (bgState.fx === 'wallpaper' || bgState.fx === 'halftone' || bgState.fx === 'grain') {
+    const layer = document.createElement('div');
+    layer.className = 'bg-img';
+    layer.style.backgroundImage = `url("${bgState.photo}")`;
+    if (bgState.fx === 'wallpaper') {
+      layer.style.filter = `blur(${getP('wallpaper','blur')}px) brightness(${1 - getP('wallpaper','dark') / 100}) saturate(1.05)`;
+      layer.style.transform = 'scale(1.1)';
+    }
+    if (bgState.fx === 'halftone') {
+      layer.style.filter = `grayscale(1) contrast(${getP('halftone','contrast') / 100}) brightness(1.05)`;
+      const dots = document.createElement('div');
+      dots.className = 'bg-dots';
+      const s = getP('halftone','dot');
+      dots.style.backgroundImage = `radial-gradient(circle, #e8e6e1 ${s * 0.3}px, transparent ${s * 0.32}px)`;
+      dots.style.backgroundSize = `${s}px ${s}px`;
+      backdropEl.appendChild(layer);
+      backdropEl.appendChild(dots);
+      saveBackdrop(); return;
+    }
+    if (bgState.fx === 'grain') {
+      layer.style.filter = `blur(${getP('grain','blur')}px) brightness(0.96)`;
+      layer.style.transform = 'scale(1.04)';
+      const grain = document.createElement('div');
+      grain.className = 'bg-grain';
+      grain.style.backgroundImage = GRAIN_URI;
+      grain.style.opacity = getP('grain','amount') / 100 * 0.6;
+      grain.style.mixBlendMode = 'overlay';
+      backdropEl.appendChild(layer);
+      backdropEl.appendChild(grain);
+      saveBackdrop(); return;
+    }
+    backdropEl.appendChild(layer);
+    saveBackdrop(); return;
+  }
+
+  if (bgState.fx === 'pixelate') {
+    const img = new Image();
+    img.onload = () => {
+      const cells = Math.max(8, Math.round(getP('pixelate','blocks')));
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const cw = cells, ch = Math.max(6, Math.round(cells * vh / vw));
+      const off = document.createElement('canvas');
+      off.width = cw; off.height = ch;
+      const offCtx = off.getContext('2d');
+      const scale = Math.max(cw / img.naturalWidth, ch / img.naturalHeight);
+      const dw = img.naturalWidth * scale, dh = img.naturalHeight * scale;
+      offCtx.drawImage(img, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+      const c = document.createElement('canvas');
+      c.width = cw; c.height = ch;
+      backdropEl.innerHTML = '';
+      backdropEl.appendChild(c);
+      const ctx = c.getContext('2d');
+      // keep the source colors; every frame each cell samples from a gently wobbling position
+      pixelAnim = {
+        src: offCtx.getImageData(0, 0, cw, ch).data,
+        out: ctx.createImageData(cw, ch),
+        cw, ch, ctx, canvas: c
+      };
+      applyMotion();
+    };
+    img.src = bgState.photo;
+    saveBackdrop(); return;
+  }
+
+  if (bgState.fx === 'gradient') {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = 3; c.height = 3;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, 3, 3);
+      const px = (x, y) => {
+        const d = ctx.getImageData(x, y, 1, 1).data;
+        return `rgb(${d[0]},${d[1]},${d[2]})`;
+      };
+      const layer = document.createElement('div');
+      layer.className = 'bg-img';
+      layer.style.background = `
+        radial-gradient(at 0% 0%, ${px(0,0)}, transparent 65%),
+        radial-gradient(at 100% 0%, ${px(2,0)}, transparent 65%),
+        radial-gradient(at 0% 100%, ${px(0,2)}, transparent 65%),
+        radial-gradient(at 100% 100%, ${px(2,2)}, transparent 65%),
+        ${px(1,1)}`;
+      layer.style.filter = `saturate(${getP('gradient','sat') / 100})`;
+      backdropEl.innerHTML = '';
+      backdropEl.appendChild(layer);
+      applyMotion();
+    };
+    img.src = bgState.photo;
+    saveBackdrop(); return;
+  }
+}
+
+function saveBackdrop() {
+  applyMotion();
+  localStorage.setItem('appetite-v2-backdrop', JSON.stringify({fx: bgState.fx, photo: bgState.photo, motion: bgState.motion, p: bgState.p}));
+}
+
+(function loadBackdrop() {
+  try {
+    const d = JSON.parse(localStorage.getItem('appetite-v2-backdrop'));
+    if (d) {
+      Object.assign(bgState, d);
+      if (!bgState.p) bgState.p = {};
+      if (!bgState.motion) bgState.motion = 'still';
+      document.querySelectorAll('#bgEffects button').forEach(x => x.classList.toggle('active', x.dataset.fx === bgState.fx));
+      document.querySelectorAll('#bgMotion button').forEach(x => x.classList.toggle('active', x.dataset.motion === bgState.motion));
+      bgThumbs.querySelectorAll('img').forEach((x, i) => x.classList.toggle('active', SHELF_IMAGES[i] === bgState.photo));
+      applyBackdrop();
+    }
+  } catch (e) {}
+  renderParams();
+})();
+
+/* ---------- ingredients on the board ---------- */
+const ingredientsEl = document.getElementById('ingredients');
+
+function photoNumber(src) {
+  return parseInt(src.match(/image-(\d+)/)[1], 10);
+}
+
+/* whatever was picked in the cabinet lies loose on the board;
+   an empty basket gets a small default spread */
+function currentBasket() {
+  try { return JSON.parse(localStorage.getItem('appetite-v2-basket') || '[]'); }
+  catch (e) { return []; }
+}
+
+function buildIngredients() {
+  ingredientsEl.innerHTML = '';
+  let numbers = currentBasket();
+  if (!numbers.length) numbers = [3, 8, 21, 26, 37, 47, 59, 75, 83, 88];
+  numbers.forEach((n, i) => {
+    const src = `img/web/image-${n}.jpg`;
+    const img = document.createElement('img');
+    img.src = `img/thumb/image-${n}.jpg`;
+    img.title = 'pick this up';
+    // deterministic scatter so the board looks the same on every visit
+    const col = i % 4, row = Math.floor(i / 4);
+    const jx = (n * 53) % 17 - 8, jy = (n * 31) % 15 - 7;
+    img.style.left = (6 + col * 24 + jx) + '%';
+    img.style.top = (8 + row * 26 + jy) + '%';
+    img.style.transform = `rotate(${(n * 7) % 21 - 10}deg)`;
+    img.addEventListener('click', () => addPhoto(src));
+    ingredientsEl.appendChild(img);
+  });
+}
+buildIngredients();
+
+/* ---------- layout persistence ---------- */
+function saveLayout() {
+  const data = pieces.map(p => ({src: p.src, x: p.x, y: p.y, w: p.w, h: p.h, poly: p.poly, z: p.z}));
+  localStorage.setItem('appetite-v2-layout', JSON.stringify(data));
+}
+
+function loadLayout() {
+  try {
+    const data = JSON.parse(localStorage.getItem('appetite-v2-layout'));
+    if (Array.isArray(data)) {
+      // an empty saved table is still a saved table — only first-ever visits get starter photos
+      data.sort((a,b) => a.z - b.z).forEach(d => makePiece(d.src, d.x, d.y, d.w, d.h, d.poly));
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+if (!loadLayout()) {
+  START_IMAGES.forEach(n => addPhoto(`img/web/image-${n}.jpg`));
+}
+
+/* keep the dish in place when the window changes size:
+   scale every piece's position with the viewport */
+let lastW = window.innerWidth, lastH = window.innerHeight;
+window.addEventListener('resize', () => {
+  const rx = window.innerWidth / lastW, ry = window.innerHeight / lastH;
+  pieces.forEach(p => { p.x *= rx; p.y *= ry; renderPiece(p); });
+  lastW = window.innerWidth; lastH = window.innerHeight;
+  saveLayout();
+});
+</script>
+</body>
+</html>

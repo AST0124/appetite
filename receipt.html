@@ -1,0 +1,279 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>appetite — the receipt</title>
+<style>
+  @font-face {
+    font-family: "Alike";
+    src: url("fonts/alike.woff2") format("woff2"),
+         url("https://fontsapi.zeoseven.com/fv/main.woff2") format("woff2");
+    font-display: swap;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #2b2119;
+    font-family: "Courier New", Courier, monospace;
+    color: #a89f8c;
+    user-select: none;
+    image-rendering: pixelated;
+  }
+
+  #title {
+    position: fixed; top: 18px; left: 22px;
+    font-size: 13px; letter-spacing: 2px; z-index: 100;
+    color: #8a8578;
+  }
+  #title b { font-weight: bold; font-family: "Alike", Georgia, serif; letter-spacing: 3px; }
+
+  /* the receipt: a strip of thermal paper printing out of the dark */
+  #slot {
+    position: fixed;
+    left: 50%; top: 0;
+    transform: translateX(-50%);
+    width: 340px;
+    height: 14px;
+    background: #26241f;
+    border-bottom: 1.5px solid #000;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.8);
+    z-index: 20;
+  }
+  #paper {
+    position: fixed;
+    left: 50%; top: 8px;
+    transform: translateX(-50%);
+    width: 300px;
+    max-height: 82vh;
+    background:
+      repeating-linear-gradient(180deg, rgba(120,105,80,0.03) 0 2px, transparent 2px 5px),
+      #f6f3ea;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.7);
+    padding: 26px 24px 34px;
+    color: #2a2721;
+    font-size: 12px;
+    letter-spacing: 1px;
+    line-height: 2.1;
+    overflow: hidden;
+    z-index: 10;
+    /* torn bottom edge */
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 8px), 96% 100%, 91% calc(100% - 6px), 85% 100%, 79% calc(100% - 7px), 73% 100%, 66% calc(100% - 5px), 60% 100%, 53% calc(100% - 8px), 47% 100%, 40% calc(100% - 5px), 34% 100%, 27% calc(100% - 7px), 21% 100%, 15% calc(100% - 5px), 9% 100%, 4% calc(100% - 7px), 0 100%);
+    transition: height 0.4s ease;
+  }
+  #paper .center { text-align: center; }
+  #paper .rule { border-top: 1px dashed #6e6a5e; margin: 8px 0; }
+  #paper .row { display: flex; justify-content: space-between; }
+  #paper .head {
+    font-family: "Alike", Georgia, serif;
+    font-size: 17px;
+    letter-spacing: 4px;
+    text-align: center;
+    margin-bottom: 2px;
+  }
+  #paper .closing {
+    margin-top: 12px;
+    font-family: "Alike", Georgia, serif;
+    font-size: 13px;
+    line-height: 2;
+    text-align: center;
+    color: #3a352a;
+  }
+  #paper .line { opacity: 0; }
+  #paper .line.printed { opacity: 1; }
+
+  #paper.ready { cursor: pointer; }
+  #paper.taken {
+    transition: transform 0.85s cubic-bezier(0.5, 0, 0.85, 0.4);
+    transform: translateX(-50%) translateY(125vh) !important;
+  }
+  #takeHint {
+    position: fixed;
+    left: 50%; bottom: 8vh;
+    transform: translateX(-50%);
+    font-size: 11px; letter-spacing: 3px;
+    color: #a89f8c;
+    opacity: 0;
+    transition: opacity 1.2s ease;
+    pointer-events: none;
+    z-index: 30;
+    animation: none;
+  }
+  #takeHint.show { opacity: 0.85; animation: breathe 2.4s ease-in-out infinite; }
+  @keyframes breathe { 0%,100% { opacity: 0.4; } 50% { opacity: 0.9; } }
+
+  /* the hand that comes to take the receipt */
+  #hand {
+    position: fixed;
+    left: calc(50% - 55px);
+    width: 170px;
+    transform: translateY(115vh) rotate(180deg);
+    pointer-events: none;
+    filter: drop-shadow(0 -4px 12px rgba(0,0,0,0.5));
+    image-rendering: pixelated;
+    z-index: 40;
+  }
+  #hand.reach { transition: transform 0.7s cubic-bezier(0.3, 0.7, 0.4, 1); transform: translateY(0) rotate(180deg); }
+  #hand.take  { transition: transform 0.85s cubic-bezier(0.5, 0, 0.85, 0.4); transform: translateY(125vh) rotate(180deg); }
+  #back {
+    position: fixed; left: 22px; bottom: 40px;
+    font-size: 11px; letter-spacing: 2px;
+    color: #6e6a5e; text-decoration: none; z-index: 100;
+  }
+
+  #status {
+    position: fixed; left: 0; bottom: 0; width: 100%;
+    border-top: 1.5px solid #111;
+    background: #e8e6e1;
+    font-size: 10px; letter-spacing: 1.5px; color: #555;
+    padding: 5px 12px;
+    display: flex; justify-content: space-between;
+    z-index: 150;
+  }
+</style>
+</head>
+<body>
+<script src="transition.js"></script>
+
+<div id="title"><b>APPETITE</b>: receipt</div>
+
+<div id="slot"></div>
+<div id="paper"></div>
+<img id="hand" alt="">
+<div id="takeHint">take your receipt</div>
+
+<a id="back" href="kitchen.html">← back to the kitchen</a>
+
+<div id="status">
+  <span>// APPETITE · elisa xu · 2026</span>
+  <span id="clock"></span>
+</div>
+
+<script>
+/* ============ EDIT ZONE ============ */
+/* 收据落款 —— Elisa 的句子（微调过语法，句式保留） */
+const RECEIPT_CLOSING = [
+  "bon appetit",
+  "at this moment, all of these are yours"
+];
+const PRINT_SPEED = 260;   // 每行打印间隔(毫秒)
+/* ==================================== */
+
+function readJSON(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
+  catch (e) { return fallback; }
+}
+
+const stats = readJSON('appetite-v2-stats', {served: 0, cuts: 0, moulds: 0, binned: 0, firstTouch: 0});
+const basket = readJSON('appetite-v2-basket', []);
+const scraps = readJSON('appetite-v2-scraps', []);
+const dish = readJSON('appetite-v2-layout', []);
+const mood = localStorage.getItem('appetite-v2-mood');
+
+const minutes = stats.firstTouch ? Math.max(1, Math.round((Date.now() - stats.firstTouch) / 60000)) : 0;
+const now = new Date();
+const pad = n => String(n).padStart(2, '0');
+const stamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}  ${now.toTimeString().slice(0, 5)}`;
+
+/* not a bill — a note from a kitchen that paid attention.
+   every line is something it remembers, kept like a host keeps your coat */
+const moodWord = localStorage.getItem('appetite-v2-mood-word');
+const LINES = [
+  { html: '<div class="head">APPETITE</div>' },
+  { html: `<div class="center">${stamp}</div>` },
+  { html: '<div class="rule"></div>' },
+  ...(moodWord && !moodWord.startsWith('[') ?
+    [{ html: `<div class="row"><span>you said</span><span>${moodWord}</span></div>` }] : []),
+  { html: `<div class="row"><span>ingredients taken</span><span>${basket.length}</span></div>` },
+  { html: `<div class="row"><span>servings brought out</span><span>${stats.served}</span></div>` },
+  { html: `<div class="row"><span>cuts made</span><span>${stats.cuts}</span></div>` },
+  { html: `<div class="row"><span>shapes pressed</span><span>${stats.moulds}</span></div>` },
+  { html: `<div class="row"><span>set aside</span><span>${stats.binned}</span></div>` },
+  { html: `<div class="row"><span>kept for you</span><span>${scraps.length}</span></div>` },
+  { html: `<div class="row"><span>on the plate now</span><span>${dish.length}</span></div>` },
+  { html: `<div class="row"><span>minutes together</span><span>${minutes}</span></div>` },
+  { html: '<div class="rule"></div>' },
+  { html: `<div class="closing">${RECEIPT_CLOSING.join('<br>')}</div>` }
+];
+
+const paper = document.getElementById('paper');
+let li = 0;
+function print() {
+  if (li >= LINES.length) {
+    paper.classList.add('ready');
+    document.getElementById('takeHint').classList.add('show');
+    return;
+  }
+  const div = document.createElement('div');
+  div.className = 'line';
+  div.innerHTML = LINES[li].html;
+  paper.appendChild(div);
+  requestAnimationFrame(() => div.classList.add('printed'));
+  li++;
+  setTimeout(print, PRINT_SPEED);
+}
+setTimeout(print, 700);
+
+/* the tabletop behind the receipt is handled by the shared backdrop tuner */
+const BAYER = [ [0,8,2,10], [12,4,14,6], [3,11,1,9], [15,7,13,5] ];
+
+/* ------- the hand comes only when you reach for the receipt ------- */
+const handImg = new Image();
+handImg.onload = () => {
+  const c = document.createElement('canvas');
+  const w = 64, h = Math.round(w * handImg.naturalHeight / handImg.naturalWidth);
+  c.width = w; c.height = h;
+  const x = c.getContext('2d');
+  x.drawImage(handImg, 0, 0, w, h);
+  const d = x.getImageData(0, 0, w, h);
+  const L = 5;
+  for (let yy = 0; yy < h; yy++) {
+    for (let xx = 0; xx < w; xx++) {
+      const i = (yy * w + xx) * 4;
+      const lum = d.data[i]*0.299 + d.data[i+1]*0.587 + d.data[i+2]*0.114;
+      d.data[i+3] = Math.max(0, Math.min(255, (lum - 16) * 10));
+      const bt = (BAYER[yy % 4][xx % 4] + 0.5) / 16 - 0.5;
+      for (let ch = 0; ch < 3; ch++) {
+        const desat = d.data[i + ch] * 0.68 + lum * 0.32;
+        let q = Math.round(desat / 255 * (L - 1) + bt);
+        q = q < 0 ? 0 : (q > L - 1 ? L - 1 : q);
+        d.data[i + ch] = q / (L - 1) * 255;
+      }
+    }
+  }
+  x.putImageData(d, 0, 0);
+  document.getElementById('hand').src = c.toDataURL();
+};
+handImg.src = 'elements/hand-cut.jpg';
+
+let taken = false;
+paper.addEventListener('click', () => {
+  if (!paper.classList.contains('ready') || taken) return;
+  taken = true;
+  document.getElementById('takeHint').classList.remove('show');
+  const hand = document.getElementById('hand');
+  const pr = paper.getBoundingClientRect();
+  hand.style.top = (pr.bottom - 62) + 'px';   // fingertips grip the torn edge
+  hand.classList.add('reach');
+  setTimeout(() => {
+    hand.classList.remove('reach');
+    hand.classList.add('take');
+    paper.classList.add('taken');
+  }, 780);
+  setTimeout(() => { (window.fadeGo || (u => window.location.href = u))('dining.html'); }, 1550);
+});
+
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toTimeString().slice(0, 8);
+}, 1000);
+</script>
+<script src="bg-tune.js"></script>
+<script>
+initBgTune({
+  key: 'appetite-v2-bgtune-receipt',
+  defaults: { photo: 85, mode: 'raw', tone: 'warm', tile: 240, levels: 8, mix: 45, dim: 30, pos: 30 }
+});
+</script>
+</body>
+</html>

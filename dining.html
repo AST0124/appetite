@@ -1,0 +1,455 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>appetite — the table</title>
+<style>
+  @font-face {
+    font-family: "Alike";
+    src: url("fonts/alike.woff2") format("woff2"),
+         url("https://fontsapi.zeoseven.com/fv/main.woff2") format("woff2");
+    font-display: swap;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    font-family: "Courier New", Courier, monospace;
+    color: #3a352a;
+    user-select: none;
+    /* the whole room is paper */
+    background:
+      radial-gradient(ellipse at 50% 30%, rgba(255,255,255,0.5), transparent 70%),
+      repeating-linear-gradient(93deg, rgba(120,105,80,0.05) 0 2px, transparent 2px 5px),
+      repeating-linear-gradient(2deg, rgba(120,105,80,0.04) 0 3px, transparent 3px 7px),
+      #f0ecdf;
+  }
+  body::after {
+    content: "";
+    position: fixed; inset: 0;
+    box-shadow: inset 0 0 120px rgba(120, 100, 60, 0.22);
+    pointer-events: none;
+  }
+
+  #title {
+    position: fixed; top: 18px; left: 22px;
+    font-size: 13px; letter-spacing: 2px; z-index: 100;
+  }
+  #title b { font-weight: bold; font-family: "Alike", Georgia, serif; letter-spacing: 3px; }
+
+  /* the same plate that stood in the kitchen, carried to the paper room */
+  #plate {
+    position: fixed;
+    left: 50%; top: 54%;
+    width: 460px; height: 460px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: radial-gradient(circle at 44% 38%, #fbfaf6, #ece9df 70%, #dcd8ca);
+    border: 1px solid rgba(60, 45, 25, 0.4);
+    box-shadow: inset 0 0 46px rgba(80, 60, 30, 0.16), 0 12px 28px rgba(90, 75, 45, 0.28);
+    pointer-events: none;
+    z-index: 1;
+  }
+  #plate::after {
+    content: "";
+    position: absolute; inset: 44px;
+    border-radius: 50%;
+    border: 1px solid rgba(60, 45, 25, 0.22);
+  }
+  #plate.taken {
+    transition: transform 0.9s cubic-bezier(0.5, 0, 0.85, 0.4);
+    transform: translate(-50%, -50%) translateY(130vh);
+  }
+
+  .piece {
+    position: absolute; top: 0; left: 0;
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    cursor: inherit;
+    filter: drop-shadow(2px 3px 6px rgba(90, 75, 45, 0.35));
+    z-index: 2;
+  }
+  .piece.eaten { opacity: 0 !important; pointer-events: none; }
+  .piece.taken {
+    transition: transform 0.9s cubic-bezier(0.5, 0, 0.85, 0.4), opacity 0.9s;
+    opacity: 0;
+  }
+
+  #emptyTable {
+    position: fixed; left: 50%; top: 52%;
+    transform: translate(-50%, -50%);
+    font-size: 12px; letter-spacing: 2px; color: #8d8571;
+    text-align: center; line-height: 2;
+  }
+
+  /* the hand that clears the table */
+  #hand {
+    position: fixed;
+    left: calc(50% - 70px);
+    width: 190px;
+    transform: translateY(120vh) rotate(180deg);
+    pointer-events: none;
+    filter: drop-shadow(0 -4px 12px rgba(90, 75, 45, 0.4));
+    image-rendering: pixelated;
+    z-index: 40;
+  }
+  #hand.reach { transition: transform 0.7s cubic-bezier(0.3, 0.7, 0.4, 1); transform: translateY(0) rotate(180deg); }
+  #hand.take  { transition: transform 0.9s cubic-bezier(0.5, 0, 0.85, 0.4); transform: translateY(130vh) rotate(180deg); }
+
+  /* the host's little dialogue window */
+  #dialogWin {
+    position: fixed;
+    left: 50%; bottom: 10vh;
+    transform: translateX(-50%) translateY(30px);
+    width: min(520px, 88vw);
+    background: #e8e6e1;
+    border: 1.5px solid #111;
+    box-shadow: 3px 3px 0 rgba(0,0,0,0.4);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.5s ease, transform 0.5s ease, visibility 0.5s;
+    z-index: 60;
+  }
+  #dialogWin.show { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0); }
+  #dialogWin .bar {
+    height: 22px;
+    border-bottom: 1.5px solid #111;
+    background: repeating-linear-gradient(180deg,
+      #e8e6e1 0 2px, #8f8c84 2px 3px, #e8e6e1 3px 5px);
+    display: flex; align-items: center; padding: 0 6px;
+  }
+  #dialogWin .bar .btn {
+    width: 11px; height: 11px;
+    border: 1.5px solid #111; background: #e8e6e1; margin-right: 6px;
+  }
+  #dialogWin .bar .wtitle {
+    font-size: 11px; letter-spacing: 2px;
+    background: #e8e6e1; color: #111;
+    padding: 0 8px; margin: 0 auto;
+  }
+  #dialogWin .body { padding: 20px 24px; color: #111; }
+  #dqn {
+    font-size: 14px; letter-spacing: 1.5px; line-height: 1.9;
+    min-height: 28px; margin-bottom: 14px;
+  }
+  #dqn .cursor {
+    display: inline-block; width: 7px; height: 13px;
+    background: #111; vertical-align: -2px;
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  #dan {
+    font-family: inherit;
+    font-size: 12px; letter-spacing: 2px;
+    text-align: left;
+    padding: 8px 16px;
+    color: #111;
+    background: #e8e6e1;
+    border: 1.5px solid #111;
+    box-shadow: inset 2px 2px 0 #fbfaf7, inset -2px -2px 0 #b3afa5;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+  }
+  #dan.show { opacity: 1; }
+  #dan::before { content: "▸ "; }
+  #dan:active { box-shadow: inset -2px -2px 0 #fbfaf7, inset 2px 2px 0 #b3afa5; }
+
+  /* free typing: whatever they want to say, or nothing */
+  #dinput {
+    display: none;
+    width: 100%;
+    font-family: inherit;
+    font-size: 13px; letter-spacing: 1.5px;
+    color: #111;
+    background: transparent;
+    border: none;
+    border-bottom: 1.5px solid #111;
+    padding: 6px 2px;
+    outline: none;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+  }
+  #dinput.show { display: block; opacity: 1; }
+
+  #back {
+    position: fixed; left: 22px; bottom: 40px;
+    font-size: 11px; letter-spacing: 2px;
+    color: #8d8571; text-decoration: none; z-index: 100;
+  }
+
+  #status {
+    position: fixed; left: 0; bottom: 0; width: 100%;
+    border-top: 1.5px solid #26221c;
+    background: #e8e4d6;
+    font-size: 10px; letter-spacing: 1.5px; color: #6b6353;
+    padding: 5px 12px;
+    display: flex; justify-content: space-between;
+    z-index: 150;
+  }
+</style>
+</head>
+<body>
+<script src="transition.js"></script>
+
+<div id="title"><b>APPETITE</b>: the table</div>
+
+<div id="plate"></div>
+<img id="hand" alt="">
+
+<div id="dialogWin">
+  <div class="bar"><div class="btn"></div><div class="wtitle">host.exe</div><div class="btn"></div></div>
+  <div class="body">
+    <div id="dqn"></div>
+    <input id="dinput" type="text" autocomplete="off" spellcheck="false">
+    <button id="dan"></button>
+  </div>
+</div>
+
+<a id="back" href="receipt.html">← the receipt</a>
+
+<div id="status">
+  <span>// APPETITE · elisa xu · 2026</span>
+  <span id="clock"></span>
+</div>
+
+<script>
+/* ============ EDIT ZONE ============ */
+const Q1 = "how was it?";                       // Elisa 的句子；观众自由打字回答
+const Q2 = "care for a walk? i know a place.";  // 小克拟的草稿，等 Elisa 点头或改
+const A2 = "...";                               // Elisa 定的：省略号浮现，点击去鱼缸
+const EMPTY_TABLE_LINE = "[ 观众没做菜就来到餐桌时显示的话 ]";
+const BITE_RADIUS = 130;                        // 一口的范围(px)
+/* ==================================== */
+
+/* ------- the spoon becomes the cursor ------- */
+const BAYER = [ [0,8,2,10], [12,4,14,6], [3,11,1,9], [15,7,13,5] ];
+const spoonImg = new Image();
+spoonImg.onload = () => {
+  const w = 56;
+  const srcH = spoonImg.naturalHeight * 0.4;          // just the spoon and the fingers
+  const h = Math.round(w * srcH / spoonImg.naturalWidth);
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const x = c.getContext('2d');
+  x.drawImage(spoonImg, 0, 0, spoonImg.naturalWidth, srcH, 0, 0, w, h);
+  const d = x.getImageData(0, 0, w, h);
+  const L = 5;
+  for (let yy = 0; yy < h; yy++) {
+    for (let xx = 0; xx < w; xx++) {
+      const i = (yy * w + xx) * 4;
+      const lum = d.data[i]*0.299 + d.data[i+1]*0.587 + d.data[i+2]*0.114;
+      d.data[i+3] = Math.max(0, Math.min(255, (lum - 16) * 10));
+      const bt = (BAYER[yy % 4][xx % 4] + 0.5) / 16 - 0.5;
+      for (let ch = 0; ch < 3; ch++) {
+        const desat = d.data[i + ch] * 0.68 + lum * 0.32;
+        let q = Math.round(desat / 255 * (L - 1) + bt);
+        q = q < 0 ? 0 : (q > L - 1 ? L - 1 : q);
+        d.data[i + ch] = q / (L - 1) * 255;
+      }
+    }
+  }
+  x.putImageData(d, 0, 0);
+  document.body.style.cursor = `url(${c.toDataURL()}) 11 8, pointer`;
+};
+spoonImg.src = 'elements/hand-spoon.jpg';
+
+/* ------- the hand that clears the plate ------- */
+const handImg = new Image();
+handImg.onload = () => {
+  const c = document.createElement('canvas');
+  const w = 64, h = Math.round(w * handImg.naturalHeight / handImg.naturalWidth);
+  c.width = w; c.height = h;
+  const x = c.getContext('2d');
+  x.drawImage(handImg, 0, 0, w, h);
+  const d = x.getImageData(0, 0, w, h);
+  const L = 5;
+  for (let yy = 0; yy < h; yy++) {
+    for (let xx = 0; xx < w; xx++) {
+      const i = (yy * w + xx) * 4;
+      const lum = d.data[i]*0.299 + d.data[i+1]*0.587 + d.data[i+2]*0.114;
+      d.data[i+3] = Math.max(0, Math.min(255, (lum - 16) * 10));
+      const bt = (BAYER[yy % 4][xx % 4] + 0.5) / 16 - 0.5;
+      for (let ch = 0; ch < 3; ch++) {
+        const desat = d.data[i + ch] * 0.68 + lum * 0.32;
+        let q = Math.round(desat / 255 * (L - 1) + bt);
+        q = q < 0 ? 0 : (q > L - 1 ? L - 1 : q);
+        d.data[i + ch] = q / (L - 1) * 255;
+      }
+    }
+  }
+  x.putImageData(d, 0, 0);
+  document.getElementById('hand').src = c.toDataURL();
+};
+handImg.src = 'elements/hand-cut.jpg';
+
+/* ------- lay the dish out on the plate ------- */
+function loadDish() {
+  try { return JSON.parse(localStorage.getItem('appetite-v2-layout') || '[]'); }
+  catch (e) { return []; }
+}
+
+const dish = loadDish();
+let remaining = 0;
+
+if (!dish.length) {
+  const d = document.createElement('div');
+  d.id = 'emptyTable';
+  d.textContent = EMPTY_TABLE_LINE;
+  document.body.appendChild(d);
+  // an empty plate still gets asked about — nobody is stranded here
+  setTimeout(finishMeal, 2400);
+} else {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  dish.forEach(p => {
+    minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x + p.w); maxY = Math.max(maxY, p.y + p.h);
+  });
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  const offX = window.innerWidth / 2 - cx;
+  const offY = window.innerHeight * 0.54 - cy;
+
+  dish.sort((a, b) => (a.z || 0) - (b.z || 0)).forEach(p => {
+    const el = document.createElement('div');
+    el.className = 'piece';
+    el.style.width = p.w + 'px';
+    el.style.height = p.h + 'px';
+    el.style.backgroundImage = `url("${p.src}")`;
+    el.style.clipPath = 'polygon(' + p.poly.map(pt => `${pt.x}% ${pt.y}%`).join(', ') + ')';
+    const base = `translate(${p.x + offX}px, ${p.y + offY}px)`;
+    el.style.transform = base;
+    el.dataset.base = base;
+    el.addEventListener('click', e => takeBite(e.clientX, e.clientY));
+    document.body.appendChild(el);
+    remaining++;
+  });
+}
+
+/* ------- chewing: each mouthful is ground down in little jolts ------- */
+function chew(el, delay) {
+  setTimeout(() => {
+    const base = el.dataset.base;
+    const seq = [
+      base + ' scale(0.74) rotate(4deg)',
+      base + ' scale(0.5) rotate(-6deg)',
+      base + ' scale(0.28) rotate(3deg)',
+      base + ' scale(0.1) rotate(-2deg)'
+    ];
+    let step = 0;
+    const iv = setInterval(() => {
+      if (step < seq.length) {
+        el.style.transform = seq[step];
+        el.style.opacity = String(1 - step * 0.22);
+        step++;
+      } else {
+        clearInterval(iv);
+        el.classList.add('eaten');
+      }
+    }, 85);
+  }, delay);
+}
+
+function takeBite(bx, by) {
+  const victims = [...document.querySelectorAll('.piece:not(.eaten)')].filter(el => {
+    if (el.dataset.chewing) return false;
+    const r = el.getBoundingClientRect();
+    const ccx = r.left + r.width / 2, ccy = r.top + r.height / 2;
+    return Math.hypot(ccx - bx, ccy - by) < BITE_RADIUS;
+  });
+  victims.forEach((el, i) => {
+    el.dataset.chewing = '1';
+    chew(el, i * 120);
+  });
+  remaining -= victims.length;
+  if (remaining <= 0 && victims.length) {
+    setTimeout(finishMeal, victims.length * 120 + 700);
+  }
+}
+
+/* ------- after the last bite: the host appears ------- */
+const dialogWin = document.getElementById('dialogWin');
+const dqn = document.getElementById('dqn');
+const dan = document.getElementById('dan');
+const dinput = document.getElementById('dinput');
+let danHandler = null;
+
+function typeQuestion(question, done) {
+  dialogWin.classList.add('show');
+  let ci = 0;
+  (function type() {
+    if (ci < question.length) {
+      ci++;
+      dqn.innerHTML = question.slice(0, ci) + '<span class="cursor"></span>';
+      setTimeout(type, 40);
+    } else {
+      done();
+    }
+  })();
+}
+
+/* question with a button answer */
+function showDialog(question, answer, onAnswer) {
+  dan.classList.remove('show');
+  dinput.classList.remove('show');
+  dan.textContent = answer;
+  if (danHandler) dan.removeEventListener('click', danHandler);
+  danHandler = onAnswer;
+  dan.addEventListener('click', danHandler);
+  typeQuestion(question, () => dan.classList.add('show'));
+}
+
+/* question with free typing: no limits, no wrong answers.
+   the reply never leaves this browser — it is stored locally, nowhere else */
+function showDialogInput(question, onSubmit) {
+  dan.classList.remove('show');
+  dinput.value = '';
+  typeQuestion(question, () => {
+    dinput.classList.add('show');
+    dinput.focus();
+  });
+  dinput.onkeydown = e => {
+    if (e.key === 'Enter') {
+      const text = dinput.value.trim();
+      try {
+        localStorage.setItem('appetite-v2-reply', JSON.stringify({ text, at: Date.now() }));
+      } catch (err) {}
+      dinput.classList.remove('show');
+      onSubmit(text);
+    }
+  };
+}
+
+function hideDialog() { dialogWin.classList.remove('show'); }
+
+function takePlateAway(done) {
+  const hand = document.getElementById('hand');
+  const pr = document.getElementById('plate').getBoundingClientRect();
+  hand.style.top = (pr.bottom - 70) + 'px';
+  hand.classList.add('reach');
+  setTimeout(() => {
+    hand.classList.remove('reach');
+    hand.classList.add('take');
+    document.getElementById('plate').classList.add('taken');
+    document.querySelectorAll('.piece').forEach(el => el.classList.add('taken'));
+  }, 750);
+  setTimeout(done, 1800);
+}
+
+function finishMeal() {
+  showDialogInput(Q1, () => {
+    hideDialog();
+    setTimeout(() => {
+      takePlateAway(() => {
+        showDialog(Q2, A2, () => { (window.fadeGo || (u => window.location.href = u))('aquarium.html'); });
+      });
+    }, 400);
+  });
+}
+
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toTimeString().slice(0, 8);
+}, 1000);
+</script>
+</body>
+</html>

@@ -1,0 +1,172 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>APPETITE — hello</title>
+<style>
+  @font-face {
+    font-family: "Alike";
+    src: url("fonts/alike.woff2") format("woff2"),
+         url("https://fontsapi.zeoseven.com/fv/main.woff2") format("woff2");
+    font-display: swap;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    /* raw, un-stylized: her photo of the machine saying good evening */
+    background: #17150f url("img/web/image-74.jpg") center / cover no-repeat;
+    font-family: "Courier New", Courier, monospace;
+    color: #d8d4c8;
+    user-select: none;
+  }
+
+  /* retro game dialogue box, bottom of the screen */
+  #dialogWin {
+    position: fixed;
+    left: 50%; bottom: 9vh;
+    transform: translateX(-50%);
+    width: min(680px, 90vw);
+    background: #e8e6e1;
+    border: 1.5px solid #111;
+    box-shadow: 3px 3px 0 rgba(0,0,0,0.55);
+  }
+  #dialogWin .bar {
+    height: 22px;
+    border-bottom: 1.5px solid #111;
+    background: repeating-linear-gradient(180deg,
+      #e8e6e1 0 2px, #8f8c84 2px 3px, #e8e6e1 3px 5px);
+    display: flex; align-items: center; padding: 0 6px;
+  }
+  #dialogWin .bar .btn {
+    width: 11px; height: 11px;
+    border: 1.5px solid #111; background: #e8e6e1; margin-right: 6px;
+  }
+  #dialogWin .bar .title {
+    font-size: 11px; letter-spacing: 2px;
+    background: #e8e6e1; color: #111;
+    padding: 0 8px; margin: 0 auto;
+  }
+  #dialogWin .body {
+    padding: 24px 28px 22px;
+    color: #111;
+  }
+  #question {
+    font-size: 15px;
+    letter-spacing: 1.5px;
+    line-height: 1.9;
+    min-height: 32px;
+    margin-bottom: 18px;
+  }
+  #question .cursor {
+    display: inline-block; width: 8px; height: 14px;
+    background: #111; vertical-align: -2px;
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  #options {
+    display: flex; flex-direction: column; gap: 8px;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+  }
+  #options.show { opacity: 1; }
+  #options button {
+    font-family: inherit;
+    font-size: 12px; letter-spacing: 2px;
+    text-align: left;
+    padding: 9px 16px;
+    color: #111;
+    background: #e8e6e1;
+    border: 1.5px solid #111;
+    box-shadow: inset 2px 2px 0 #fbfaf7, inset -2px -2px 0 #b3afa5;
+    cursor: pointer;
+  }
+  #options button:hover { background: #dad6cb; }
+  #options button::before { content: "▸ "; }
+  #options button:active {
+    box-shadow: inset -2px -2px 0 #fbfaf7, inset 2px 2px 0 #b3afa5;
+  }
+
+  #status {
+    position: fixed; left: 0; bottom: 0; width: 100%;
+    border-top: 1.5px solid #111;
+    background: #e8e6e1;
+    font-size: 10px; letter-spacing: 1.5px; color: #555;
+    padding: 5px 12px;
+    display: flex; justify-content: space-between;
+    z-index: 50;
+  }
+</style>
+</head>
+<body>
+<script src="transition.js"></script>
+
+<div id="dialogWin">
+  <div class="bar"><div class="btn"></div><div class="title">host.exe</div><div class="btn"></div></div>
+  <div class="body">
+    <div id="question"></div>
+    <div id="options"></div>
+  </div>
+</div>
+
+<div id="status">
+  <span>// APPETITE · elisa xu · 2026</span>
+  <span id="clock"></span>
+</div>
+
+<script>
+/* ============ EDIT ZONE ============ */
+/* 开场问题 —— 用的是 Elisa 提议的那句，想换随时换 */
+const QUESTION = "how are you feeling today?";
+/* 假分支选项：label 是观众看到的字（等 Elisa 写），
+   shelf 决定储藏室里哪一层架子被摆到最上面 */
+const OPTIONS = [
+  { label: "going through motions", shelf: "domestic" },
+  { label: "sweet", shelf: "nature" },
+  { label: "i just want some salad", shelf: "appetite" }
+];
+/* 背景照片在上面的 CSS 里（image-74），想换编号改那里 */
+/* ==================================== */
+
+/* type the question, then reveal the choices */
+const qEl = document.getElementById('question');
+const optionsEl = document.getElementById('options');
+let ci = 0;
+function type() {
+  if (ci < QUESTION.length) {
+    ci++;
+    qEl.innerHTML = QUESTION.slice(0, ci) + '<span class="cursor"></span>';
+    setTimeout(type, 42);
+  } else {
+    qEl.innerHTML = QUESTION + '<span class="cursor"></span>';
+    optionsEl.classList.add('show');
+  }
+}
+setTimeout(type, 500);
+
+OPTIONS.forEach(opt => {
+  const b = document.createElement('button');
+  b.textContent = opt.label;
+  b.addEventListener('click', () => {
+    localStorage.setItem('appetite-v2-mood', opt.shelf);
+    localStorage.setItem('appetite-v2-mood-word', opt.label);
+    (window.fadeGo || (u => window.location.href = u))('cabinet.html');
+  });
+  optionsEl.appendChild(b);
+});
+
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toTimeString().slice(0, 8);
+}, 1000);
+</script>
+<script src="bg-tune.js"></script>
+<script>
+initBgTune({
+  key: 'appetite-v2-bgtune-dialog',
+  defaults: { photo: 74, mode: 'raw', dim: 30, tone: 'night', tile: 460, levels: 6, mix: 45 }
+});
+</script>
+</body>
+</html>

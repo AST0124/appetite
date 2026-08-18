@@ -1,0 +1,326 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>appetite — the tank</title>
+<style>
+  @font-face {
+    font-family: "Alike";
+    src: url("fonts/alike.woff2") format("woff2"),
+         url("https://fontsapi.zeoseven.com/fv/main.woff2") format("woff2");
+    font-display: swap;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #22302b;
+    font-family: "Courier New", Courier, monospace;
+    color: #c3d6ca;
+    user-select: none;
+  }
+
+  #title {
+    position: fixed; top: 18px; left: 22px;
+    font-size: 13px; letter-spacing: 2px; z-index: 100;
+    color: #9fb8a8;
+    text-shadow: 0 0 6px rgba(120, 220, 160, 0.35);
+  }
+  #title b { font-weight: bold; font-family: "Alike", Georgia, serif; letter-spacing: 3px; }
+  #hint {
+    position: fixed; top: 40px; left: 22px;
+    font-size: 11px; letter-spacing: 1px; color: #5d6f64; z-index: 100;
+    max-width: 60ch; line-height: 1.8;
+  }
+
+  /* the tank: an old machine's screen holding water */
+  #tankWin {
+    position: fixed;
+    left: 50%; top: 45%;
+    transform: translate(-50%, -50%);
+    width: min(82vw, 1150px);
+    background: #e8e6e1;
+    border: 1.5px solid #111;
+    box-shadow: 3px 3px 0 rgba(0,0,0,0.6), 0 0 60px rgba(90, 200, 150, 0.08);
+  }
+  #tankWin .bar {
+    height: 22px;
+    border-bottom: 1.5px solid #111;
+    background: repeating-linear-gradient(180deg,
+      #e8e6e1 0 2px, #8f8c84 2px 3px, #e8e6e1 3px 5px);
+    display: flex; align-items: center;
+    padding: 0 6px;
+  }
+  #tankWin .bar .btn {
+    width: 11px; height: 11px;
+    border: 1.5px solid #111;
+    background: #e8e6e1;
+    margin-right: 6px;
+  }
+  #tankWin .bar .title {
+    font-size: 11px; letter-spacing: 2px;
+    background: #e8e6e1; color: #111;
+    padding: 0 8px; margin: 0 auto;
+  }
+
+  #tank {
+    position: relative;
+    height: min(60vh, 600px);
+    overflow: hidden;
+    background:
+      radial-gradient(ellipse at 30% 0%, rgba(210, 250, 230, 0.28), transparent 55%),
+      linear-gradient(180deg, #3d6d5e 0%, #2a5347 50%, #1d4038 100%);
+  }
+  /* light through water + CRT scanlines + glass */
+  #tank::after {
+    content: "";
+    position: absolute; inset: 0;
+    background:
+      linear-gradient(105deg, transparent 12%, rgba(235, 255, 244, 0.13) 16%, rgba(235, 255, 244, 0.02) 24%, transparent 30%),
+      linear-gradient(112deg, transparent 40%, rgba(235, 255, 244, 0.16) 45%, rgba(235, 255, 244, 0.03) 53%, transparent 58%),
+      linear-gradient(100deg, transparent 68%, rgba(235, 255, 244, 0.10) 73%, transparent 82%),
+      repeating-linear-gradient(180deg, rgba(0,0,0,0.14) 0 2px, transparent 2px 4px);
+    pointer-events: none;
+    z-index: 5;
+  }
+  .fish {
+    position: absolute;
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    filter: saturate(0.72) brightness(0.9) contrast(1.05) drop-shadow(0 0 8px rgba(120, 220, 170, 0.18));
+    image-rendering: pixelated;
+    will-change: transform;
+  }
+  /* HUD in the corner of the screen, like an old game */
+  #hud {
+    position: absolute; top: 10px; right: 14px;
+    font-size: 10px; letter-spacing: 2px;
+    color: #7fd6a4;
+    text-shadow: 0 0 5px rgba(120, 220, 160, 0.5);
+    text-align: right;
+    line-height: 1.9;
+    z-index: 6;
+  }
+  #empty {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; letter-spacing: 2px; color: #567263;
+    text-align: center; line-height: 2;
+    z-index: 4;
+  }
+
+  /* the way back around: another answer, another pantry, another worldline */
+  #again {
+    position: fixed; right: 26px; bottom: 40px;
+    font-family: inherit;
+    font-size: 12px; letter-spacing: 2px;
+    color: #111; text-decoration: none;
+    border: 1.5px solid #111;
+    padding: 9px 18px;
+    background: #e8e6e1;
+    box-shadow: inset 2px 2px 0 #fbfaf7, inset -2px -2px 0 #b3afa5;
+    z-index: 100;
+  }
+  #again:active { box-shadow: inset -2px -2px 0 #fbfaf7, inset 2px 2px 0 #b3afa5; }
+
+  /* the quiet voice under the tank — typed, no dialog box */
+  #monologue {
+    position: fixed;
+    left: 50%;
+    bottom: 11vh;
+    transform: translateX(-50%);
+    width: min(70ch, 86vw);
+    font-size: 12px; letter-spacing: 2px;
+    color: #c3d6ca;
+    line-height: 2.2;
+    text-align: center;
+    z-index: 90;
+  }
+  #monologue .cursor {
+    display: inline-block; width: 7px; height: 12px;
+    background: #c3d6ca; vertical-align: -2px;
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  #back {
+    position: fixed; left: 22px; bottom: 40px;
+    font-size: 11px; letter-spacing: 2px;
+    color: #5d6f64; text-decoration: none; z-index: 100;
+  }
+
+  #hoverPreview {
+    position: fixed;
+    width: 150px;
+    padding: 6px 6px 16px;
+    background: #f4f2ed;
+    border: 1px solid #111;
+    box-shadow: 3px 4px 0 rgba(0,0,0,0.5);
+    transform: rotate(-5deg) translateY(10px);
+    pointer-events: none;
+    opacity: 0; visibility: hidden;
+    transition: opacity 0.35s ease, transform 0.35s ease, visibility 0.35s;
+    z-index: 190;
+  }
+  #hoverPreview.on { opacity: 0.88; visibility: visible; transform: rotate(-5deg) translateY(0); }
+  #hoverPreview img { display: block; width: 100%; }
+
+  #status {
+    position: fixed; left: 0; bottom: 0; width: 100%;
+    border-top: 1.5px solid #111;
+    background: #e8e6e1;
+    font-size: 10px; letter-spacing: 1.5px; color: #555;
+    padding: 5px 12px;
+    display: flex; justify-content: space-between;
+    z-index: 150;
+  }
+</style>
+</head>
+<body>
+<script src="transition.js"></script>
+
+<div id="title"><b>APPETITE</b>: rumination</div>
+
+<div id="tankWin">
+  <div class="bar"><div class="btn"></div><div class="title">tank.sys</div><div class="btn"></div></div>
+  <div id="tank">
+    <div id="hud"></div>
+  </div>
+</div>
+
+<div id="monologue"></div>
+
+<a id="back" href="dining.html">← back to the table</a>
+<a id="again" href="dialog.html">still hungry?</a>
+
+<div id="hoverPreview"><img alt=""></div>
+
+<div id="status">
+  <span>// APPETITE · elisa xu · 2026</span>
+  <span id="clock"></span>
+</div>
+
+<script>
+/* ============ EDIT ZONE ============ */
+/* 缸下的独白 —— 按 Elisa 的中文草稿翻的，措辞随时改；一行一行打出来 */
+const RUMINATION_LINES = [
+  "i once heard of a thing called rumination,",
+  "where an animal brings up what it has already swallowed,",
+  "and chews it, slowly, a second time."
+];
+const EMPTY_LINE = "[ 空鱼缸时显示的话 —— 比如提示他们还没扔过东西 ]";
+const SWIM_SPEED = 1;        // 整体游速倍率
+const FISH_SCALE = 0.45;     // 边角料变成鱼时缩小到原来的多少
+const SNAP = 3;              // PSX式顿挫的格子大小(px)，越大越卡顿复古
+/* ==================================== */
+
+const tank = document.getElementById('tank');
+const hud = document.getElementById('hud');
+let fishes = [];
+
+function loadScraps() {
+  try { return JSON.parse(localStorage.getItem('appetite-v2-scraps') || '[]'); }
+  catch (e) { return []; }
+}
+
+const scraps = loadScraps();
+hud.innerHTML = `specimens: ${scraps.length}<br>o2: ok<br>glass: sealed`;
+
+if (!scraps.length) {
+  const d = document.createElement('div');
+  d.id = 'empty';
+  d.textContent = EMPTY_LINE;
+  tank.appendChild(d);
+} else {
+  /* the scraps swim exactly as they were cut — ragged, uneven, alive */
+  scraps.forEach(s => {
+    const el = document.createElement('div');
+    el.className = 'fish';
+    const w = s.w * FISH_SCALE, h = s.h * FISH_SCALE;
+    el.style.width = w + 'px';
+    el.style.height = h + 'px';
+    el.style.backgroundImage = `url("${s.src}")`;
+    el.style.clipPath = 'polygon(' + s.poly.map(pt => `${pt.x}% ${pt.y}%`).join(', ') + ')';
+    tank.appendChild(el);
+    fishes.push({
+      el, w, h,
+      x: Math.random() * Math.max(40, tank.clientWidth - w),
+      y: Math.random() * Math.max(40, tank.clientHeight - h),
+      vx: (Math.random() * 0.5 + 0.25) * (Math.random() < 0.5 ? -1 : 1),
+      phase: Math.random() * Math.PI * 2,
+      wob: 14 + Math.random() * 18
+    });
+  });
+
+  function swim() {
+    const tw = tank.clientWidth, th = tank.clientHeight;
+    const t = performance.now() / 1000;
+    fishes.forEach(f => {
+      f.x += f.vx * SWIM_SPEED;
+      if (f.x < -f.w * 0.4) { f.x = -f.w * 0.4; f.vx *= -1; }
+      if (f.x > tw - f.w * 0.6) { f.x = tw - f.w * 0.6; f.vx *= -1; }
+      const y = Math.min(Math.max(f.y + Math.sin(t * 0.7 + f.phase) * f.wob, 0), th - f.h);
+      // PSX vertex snap: positions and angles land on a coarse grid
+      const px = Math.round(f.x / SNAP) * SNAP;
+      const py = Math.round(y / SNAP) * SNAP;
+      const tilt = Math.round(Math.sin(t * 0.9 + f.phase) * 4 / 3) * 3 * (f.vx > 0 ? 1 : -1);
+      const flip = f.vx < 0 ? -1 : 1;
+      f.el.style.transform = `translate(${px}px, ${py}px) rotate(${tilt}deg) scaleX(${flip})`;
+    });
+    requestAnimationFrame(swim);
+  }
+  requestAnimationFrame(swim);
+}
+
+/* clock + hover preview */
+/* the voice under the tank: one line at a time, like an old RPG,
+   each line dissolving before the next is spoken */
+const mono = document.getElementById('monologue');
+let mLine = 0;
+function speakLine() {
+  if (mLine >= RUMINATION_LINES.length) return;
+  const line = RUMINATION_LINES[mLine];
+  const last = mLine === RUMINATION_LINES.length - 1;
+  let c = 0;
+  (function t() {
+    if (c < line.length) {
+      c++;
+      mono.innerHTML = line.slice(0, c) + '<span class="cursor"></span>';
+      setTimeout(t, 62);
+    } else if (!last) {
+      setTimeout(() => { mLine++; speakLine(); }, 2100);
+    }
+    /* the last line stays, cursor blinking */
+  })();
+}
+setTimeout(speakLine, 1600);
+
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toTimeString().slice(0, 8);
+}, 1000);
+
+const hp = document.getElementById('hoverPreview');
+const hpImg = hp.querySelector('img');
+document.querySelectorAll('[data-preview]').forEach(el => {
+  el.addEventListener('mouseenter', e => {
+    hpImg.src = el.dataset.preview;
+    hp.style.left = (e.clientX - 170) + 'px';
+    hp.style.top = (e.clientY - 100) + 'px';
+    hp.classList.add('on');
+  });
+  el.addEventListener('mousemove', e => {
+    hp.style.left = (e.clientX - 170) + 'px';
+    hp.style.top = (e.clientY - 100) + 'px';
+  });
+  el.addEventListener('mouseleave', () => hp.classList.remove('on'));
+});
+</script>
+<script src="bg-tune.js"></script>
+<script>
+initBgTune({
+  key: 'appetite-v2-bgtune-tank',
+  defaults: { photo: 15, mode: 'raw', tone: 'warm', tile: 760, levels: 8, mix: 38, dim: 34, pos: 30 }
+});
+</script>
+</body>
+</html>
